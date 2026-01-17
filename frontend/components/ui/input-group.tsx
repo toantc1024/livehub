@@ -102,6 +102,8 @@ function InputGroupButton({
   type = "button",
   variant = "ghost",
   size = "xs",
+  icon: _icon,
+  iconPlacement: _iconPlacement,
   ...props
 }: Omit<React.ComponentProps<typeof Button>, "size"> &
   VariantProps<typeof inputGroupButtonVariants>) {
