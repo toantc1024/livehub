@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/auth-context";
 import { api } from "@/lib/api";
+import { PageLoading } from "@/components/ui/loading";
 import {
   ExternalLink,
   Images,
@@ -19,6 +22,9 @@ interface ImageListResponse {
 }
 
 export default function AllPhotosPage() {
+  const { isLoading, isAuthenticated, needsProfileSetup } = useAuth();
+  const router = useRouter();
+
   const [images, setImages] = useState<ImageItem[]>([]);
   const [isLoadingImages, setIsLoadingImages] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -62,10 +68,23 @@ export default function AllPhotosPage() {
     []
   );
 
-  // Initial load
+  // Auth check
   useEffect(() => {
-    fetchImages(1, filter);
-  }, [fetchImages, filter]);
+    if (!isLoading && !isAuthenticated) {
+      router.replace("/");
+      return;
+    }
+    if (!isLoading && isAuthenticated && needsProfileSetup) {
+      router.replace("/gallery/register-face");
+    }
+  }, [isLoading, isAuthenticated, needsProfileSetup, router]);
+
+  // Initial load - only fetch if authenticated and profile complete
+  useEffect(() => {
+    if (isAuthenticated && !needsProfileSetup) {
+      fetchImages(1, filter);
+    }
+  }, [fetchImages, filter, isAuthenticated, needsProfileSetup]);
 
   const handleFilterChange = (newFilter: "all" | "my-face") => {
     setFilter(newFilter);
@@ -79,6 +98,9 @@ export default function AllPhotosPage() {
       fetchImages(page + 1, filter, true);
     }
   };
+
+  if (isLoading) return <PageLoading text="Đang tải..." />;
+  if (!isAuthenticated || needsProfileSetup) return <PageLoading text="Đang chuyển hướng..." />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
