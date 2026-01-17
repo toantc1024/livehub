@@ -208,45 +208,52 @@ export function ImageGrid({
   // If customized click handler is provided, don't use PhotoProvider/PhotoView
   if (onImageClick) {
     return (
-      <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3 }}
-          className={gridClassName}
-        >
-        <AnimatePresence mode="popLayout">
-            {images.map((image, index) => (
-              <motion.div
-                key={image.id}
-                layout
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.3, delay: Math.min(index * 0.02, 0.2) }}
-                onClick={() => onImageClick(image)}
-              >
-                 <ImageCardContent 
-                    image={image} 
-                    isLoaded={loadedImages.has(image.id)} 
-                    onLoad={handleImageLoad}
-                    onDownload={handleDownload}
-                 />
-              </motion.div>
-            ))}
-        </AnimatePresence>
+      <>
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className={gridClassName}
+          >
+          <AnimatePresence mode="popLayout">
+              {images.map((image, index) => (
+                <motion.div
+                  key={image.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.3, delay: Math.min(index * 0.02, 0.2) }}
+                  onClick={() => onImageClick(image)}
+                >
+                   <ImageCardContent 
+                      image={image} 
+                      isLoaded={loadedImages.has(image.id)} 
+                      onLoad={handleImageLoad}
+                      onDownload={handleDownload}
+                   />
+                </motion.div>
+              ))}
+          </AnimatePresence>
+        </motion.div>
         
-        {/* Load more logic reuse... */}
+        {/* Load more trigger & indicator */}
         {hasMore && (
-        <div ref={loadMoreRef} className="flex items-center justify-center py-8">
-            {isLoadingMore ? (
-            <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                <span className="text-sm">Đang tải thêm...</span>
-            </div>
-            ) : null}
-        </div>
-      )}
-      </motion.div>
+          <div ref={loadMoreRef} className="flex items-center justify-center py-8">
+              {isLoadingMore ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="text-sm">Đang tải thêm...</span>
+              </div>
+              ) : null}
+          </div>
+        )}
+        {!hasMore && images.length > 0 && onLoadMore && (
+          <div className="py-8 text-center">
+              <p className="text-sm text-muted-foreground">Đã hiển thị tất cả ảnh</p>
+          </div>
+        )}
+      </>
     );
   }
 
