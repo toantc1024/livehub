@@ -144,15 +144,15 @@ async def list_images(
 
 @router.get("/recent", response_model=ImageListResponse)
 async def get_recent_images(
-    user: CurrentUser,
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(6, ge=1, le=20),
 ):
     """
-    Get recent images from entire system.
+    Get recent images from entire system (public endpoint).
     
-    Used for "Những khoảnh khắc đáng nhớ" section on gallery homepage.
+    Used for "Những khoảnh khắc đáng nhớ" section on gallery homepage
+    and embed gallery widget.
     Only returns READY images.
     """
     # Query all READY images, newest first

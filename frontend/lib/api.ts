@@ -116,12 +116,12 @@ export const api = {
   },
 
   /**
-   * Get recent images from entire system.
-   * Used for "Những khoảnh khắc đáng nhớ" section.
+   * Get recent images from entire system (public endpoint).
+   * Used for "Những khoảnh khắc đáng nhớ" section and embed gallery.
    */
   async getRecentImages(page = 1, pageSize = 6): Promise<any> {
-    const res = await fetchWithAuth(
-      `/images/recent?page=${page}&page_size=${pageSize}`
+    const res = await fetch(
+      apiUrl(`/images/recent?page=${page}&page_size=${pageSize}`)
     );
     if (!res.ok) throw new Error("Failed to fetch recent images");
     return res.json();
