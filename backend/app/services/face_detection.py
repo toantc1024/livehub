@@ -35,7 +35,7 @@ class FaceDetectionService:
     def __init__(self):
         from app.config import settings
         
-        self.model_name = "Facenet"
+        self.model_name = "Facenet512"
         self.detector_backend = "retinaface"
         self.use_cuda = settings.USE_CUDA
         
