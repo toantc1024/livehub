@@ -29,10 +29,29 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 # Schemas
 # ==================
 
+class ImagesStats(BaseModel):
+    total: int
+    processing: int
+    ready: int
+    error: int
+    totalViews: int
+    totalDownloads: int
+
+
+class FacesStats(BaseModel):
+    total: int
+    assigned: int
+    unassigned: int
+
+
+class UsersStats(BaseModel):
+    total: int
+
+
 class StatsResponse(BaseModel):
-    images: dict
-    faces: dict
-    users: dict
+    images: ImagesStats
+    faces: FacesStats
+    users: UsersStats
 
 
 class FaceUpdateRequest(BaseModel):
@@ -48,6 +67,7 @@ class UserListItem(BaseModel):
     id: str
     name: Optional[str] = None
     email: str
+    role: str
     avatarUrl: Optional[str] = None
     profileData: Optional[dict] = None
     createdAt: datetime
@@ -389,8 +409,22 @@ async def admin_list_users(
     result = await db.execute(query)
     users = result.scalars().all()
     
+    # Convert users to response items (role enum -> string)
+    items = [
+        UserListItem(
+            id=u.id,
+            name=u.name,
+            email=u.email,
+            role=u.role.value,
+            avatarUrl=u.avatarUrl,
+            profileData=u.profileData,
+            createdAt=u.createdAt,
+        )
+        for u in users
+    ]
+    
     return UserListResponse(
-        items=[UserListItem.model_validate(u) for u in users],
+        items=items,
         total=total,
         page=page,
         page_size=page_size,

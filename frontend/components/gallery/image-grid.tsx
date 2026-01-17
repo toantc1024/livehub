@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Download, ZoomIn, RefreshCw, Loader2, Image as ImageIcon, Smartphone, ExternalLink, Hand } from "lucide-react";
+import {
+  Download,
+  ZoomIn,
+  RefreshCw,
+  Loader2,
+  Image as ImageIcon,
+  Smartphone,
+  ExternalLink,
+  Hand,
+} from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { PhotoProvider, PhotoView } from "react-photo-view";
@@ -47,24 +56,25 @@ export function ImageSkeleton() {
 }
 
 // Helper component for card content to avoid duplication
-const BLUR_DATA_URL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAUH/8QAIhAAAQMDBAMAAAAAAAAAAAAAAQIDBAAFEQYSITEHE0H/xAAVAQEBAAAAAAAAAAAAAAAAAAADBf/EABkRAAIDAQAAAAAAAAAAAAAAAAECAAMRIf/aAAwDAQACEQMRAD8AqeM9Y3e43q8RLncJE2LBWGo6HlFQYSpIUck9kk/KKUrDLJkyJUd//9k=";
+const BLUR_DATA_URL =
+  "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAUH/8QAIhAAAQMDBAMAAAAAAAAAAAAAAQIDBAAFEQYSITEHE0H/xAAVAQEBAAAAAAAAAAAAAAAAAAADBf/EABkRAAIDAQAAAAAAAAAAAAAAAAECAAMRIf/aAAwDAQACEQMRAD8AqeM9Y3e43q8RLncJE2LBWGo6HlFQYSpIUck9kk/KKUrDLJkyJUd//9k=";
 
-const ImageCardContent = ({ 
-  image, 
-  isLoaded, 
-  onLoad, 
-  onDownload 
-}: { 
-  image: ImageItem, 
-  isLoaded: boolean, 
-  onLoad: (id: string) => void,
-  onDownload: (url: string, filename: string) => void
+const ImageCardContent = ({
+  image,
+  isLoaded,
+  onLoad,
+  onDownload,
+}: {
+  image: ImageItem;
+  isLoaded: boolean;
+  onLoad: (id: string) => void;
+  onDownload: (url: string, filename: string) => void;
 }) => (
   <div className="group relative aspect-square rounded-2xl overflow-hidden bg-muted cursor-pointer">
     {/* Loading placeholder */}
     {!isLoaded && (
       <div className="absolute inset-0 bg-gradient-to-br from-muted to-muted/50 animate-pulse z-10">
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent skeleton-shimmer" />
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent skeleton-shimmer" />
       </div>
     )}
 
@@ -88,21 +98,21 @@ const ImageCardContent = ({
 
     {/* Overlay with Download Button at Bottom Left/Right */}
     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-        <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-            <span className="text-white text-xs truncate max-w-[70%] opacity-90">
-            {image.filename}
-            </span>
-            <button
-            onClick={(e) => {
-                e.stopPropagation();
-                onDownload(image.originalUrl, image.filename);
-            }}
-            className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors flex-shrink-0 backdrop-blur-sm"
-            title="Tải ảnh"
-            >
-            <Download className="h-3.5 w-3.5 text-white" />
-            </button>
-        </div>
+      <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+        <span className="text-white text-xs truncate max-w-[70%] opacity-90">
+          {image.filename}
+        </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDownload(image.originalUrl, image.filename);
+          }}
+          className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors flex-shrink-0 backdrop-blur-sm"
+          title="Tải ảnh"
+        >
+          <Download className="h-3.5 w-3.5 text-white" />
+        </button>
+      </div>
     </div>
   </div>
 );
@@ -116,7 +126,7 @@ export function ImageGrid({
   emptyMessage = "Chưa có ảnh nào",
   emptySubMessage = "Thư viện ảnh hiện đang trống",
   gridClassName = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3",
-  onImageClick
+  onImageClick,
 }: ImageGridProps & { onImageClick?: (image: ImageItem) => void }) {
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -127,27 +137,30 @@ export function ImageGrid({
   const handleImageLoad = (imageId: string) => {
     setLoadedImages((prev) => new Set(prev).add(imageId));
   };
-  
+
   // Check if device needs special download handling
   const needsDownloadHelp = () => {
-    if (typeof navigator === 'undefined') return false;
+    if (typeof navigator === "undefined") return false;
     const ua = navigator.userAgent;
     // Detect iOS
     const isIOS = /iPad|iPhone|iPod/.test(ua);
     // Detect in-app browsers (Zalo, Facebook, Messenger, Instagram, etc.)
-    const isInAppBrowser = /FBAN|FBAV|Instagram|Zalo|Line|Twitter|Snapchat/i.test(navigator.userAgent);
+    const isInAppBrowser =
+      /FBAN|FBAV|Instagram|Zalo|Line|Twitter|Snapchat/i.test(
+        navigator.userAgent,
+      );
     // Detect Android WebView
     const isAndroidWebView = /wv\)/.test(ua);
     return isIOS || isInAppBrowser || isAndroidWebView;
   };
-  
+
   const handleDownload = async (url: string, filename: string) => {
     // Find image ID to increment count
-    const image = images.find(img => img.originalUrl === url);
+    const image = images.find((img) => img.originalUrl === url);
     if (image) {
-        api.incrementDownloadCount(image.id);
+      api.incrementDownloadCount(image.id);
     }
-    
+
     try {
       // For iOS and in-app browsers, show instruction dialog
       if (needsDownloadHelp()) {
@@ -155,7 +168,7 @@ export function ImageGrid({
         setShowDownloadHelp(true);
         return;
       }
-      
+
       // Standard download for desktop browsers
       const response = await fetch(url);
       const blob = await response.blob();
@@ -191,7 +204,7 @@ export function ImageGrid({
       {
         rootMargin: "200px",
         threshold: 0.1,
-      }
+      },
     );
 
     if (loadMoreRef.current) {
@@ -213,8 +226,12 @@ export function ImageGrid({
         ))}
         <style jsx global>{`
           @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
+            0% {
+              transform: translateX(-100%);
+            }
+            100% {
+              transform: translateX(100%);
+            }
           }
           .skeleton-shimmer {
             animation: shimmer 1.5s infinite;
@@ -234,7 +251,9 @@ export function ImageGrid({
         <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-primary/10 flex items-center justify-center mb-4 sm:mb-6">
           <ImageIcon className="h-8 w-8 sm:h-10 sm:w-10 text-primary" />
         </div>
-        <h2 className="text-base sm:text-lg font-semibold mb-2">{emptyMessage}</h2>
+        <h2 className="text-base sm:text-lg font-semibold mb-2">
+          {emptyMessage}
+        </h2>
         <p className="text-muted-foreground text-sm max-w-md px-4">
           {emptySubMessage}
         </p>
@@ -247,47 +266,55 @@ export function ImageGrid({
     return (
       <>
         <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className={gridClassName}
-          >
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+          className={gridClassName}
+        >
           <AnimatePresence mode="popLayout">
-              {images.map((image, index) => (
-                <motion.div
-                  key={image.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  transition={{ duration: 0.3, delay: Math.min(index * 0.02, 0.2) }}
-                  onClick={() => onImageClick(image)}
-                >
-                   <ImageCardContent 
-                      image={image} 
-                      isLoaded={loadedImages.has(image.id)} 
-                      onLoad={handleImageLoad}
-                      onDownload={handleDownload}
-                   />
-                </motion.div>
-              ))}
+            {images.map((image, index) => (
+              <motion.div
+                key={image.id}
+                layout
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{
+                  duration: 0.3,
+                  delay: Math.min(index * 0.02, 0.2),
+                }}
+                onClick={() => onImageClick(image)}
+              >
+                <ImageCardContent
+                  image={image}
+                  isLoaded={loadedImages.has(image.id)}
+                  onLoad={handleImageLoad}
+                  onDownload={handleDownload}
+                />
+              </motion.div>
+            ))}
           </AnimatePresence>
         </motion.div>
-        
+
         {/* Load more trigger & indicator */}
         {hasMore && (
-          <div ref={loadMoreRef} className="flex items-center justify-center py-8">
-              {isLoadingMore ? (
+          <div
+            ref={loadMoreRef}
+            className="flex items-center justify-center py-8"
+          >
+            {isLoadingMore ? (
               <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span className="text-sm">Đang tải thêm...</span>
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Đang tải thêm...</span>
               </div>
-              ) : null}
+            ) : null}
           </div>
         )}
         {!hasMore && images.length > 0 && onLoadMore && (
           <div className="py-8 text-center">
-              <p className="text-sm text-muted-foreground">Đã hiển thị tất cả ảnh</p>
+            <p className="text-sm text-muted-foreground">
+              Đã hiển thị tất cả ảnh
+            </p>
           </div>
         )}
       </>
@@ -317,7 +344,10 @@ export function ImageGrid({
                 <button
                   className="PhotoView-Slider__toolbarIcon"
                   onClick={() =>
-                    handleDownload(currentImage.originalUrl, currentImage.filename)
+                    handleDownload(
+                      currentImage.originalUrl,
+                      currentImage.filename,
+                    )
                   }
                 >
                   <Download className="h-5 w-5" />
@@ -341,18 +371,21 @@ export function ImageGrid({
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.3, delay: Math.min(index * 0.02, 0.2) }}
+                transition={{
+                  duration: 0.3,
+                  delay: Math.min(index * 0.02, 0.2),
+                }}
               >
                 <PhotoView src={image.originalUrl}>
-                   {/* Wrap inside a div because PhotoView expects a single child and attaches props to it */}
-                   <div className="w-full h-full"> 
-                      <ImageCardContent 
-                        image={image} 
-                        isLoaded={loadedImages.has(image.id)} 
-                        onLoad={handleImageLoad}
-                        onDownload={handleDownload}
-                     />
-                   </div>
+                  {/* Wrap inside a div because PhotoView expects a single child and attaches props to it */}
+                  <div className="w-full h-full">
+                    <ImageCardContent
+                      image={image}
+                      isLoaded={loadedImages.has(image.id)}
+                      onLoad={handleImageLoad}
+                      onDownload={handleDownload}
+                    />
+                  </div>
                 </PhotoView>
               </motion.div>
             ))}
@@ -362,31 +395,40 @@ export function ImageGrid({
 
       {/* Load more trigger & indicator */}
       {hasMore && (
-        <div ref={loadMoreRef} className="flex items-center justify-center py-8">
-            {isLoadingMore ? (
+        <div
+          ref={loadMoreRef}
+          className="flex items-center justify-center py-8"
+        >
+          {isLoadingMore ? (
             <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                <span className="text-sm">Đang tải thêm...</span>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">Đang tải thêm...</span>
             </div>
-            ) : null}
+          ) : null}
         </div>
       )}
       {!hasMore && images.length > 0 && onLoadMore && (
         <div className="py-8 text-center">
-            <p className="text-sm text-muted-foreground">Đã hiển thị tất cả ảnh</p>
+          <p className="text-sm text-muted-foreground">
+            Đã hiển thị tất cả ảnh
+          </p>
         </div>
       )}
 
       {/* Styles */}
       <style jsx global>{`
         @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
+          0% {
+            transform: translateX(-100%);
+          }
+          100% {
+            transform: translateX(100%);
+          }
         }
         .skeleton-shimmer {
           animation: shimmer 1.5s infinite;
         }
-        
+
         /* Lightbox Navigation Buttons - Circle Style */
         .PhotoView-Slider__ArrowLeft,
         .PhotoView-Slider__ArrowRight {
@@ -403,52 +445,50 @@ export function ImageGrid({
           transition: all 0.2s ease !important;
           opacity: 0.8 !important;
         }
-        
+
         .PhotoView-Slider__ArrowLeft:hover,
         .PhotoView-Slider__ArrowRight:hover {
           background: rgba(255, 255, 255, 0.25) !important;
           opacity: 1 !important;
           transform: scale(1.1) !important;
         }
-        
+
         .PhotoView-Slider__ArrowLeft:active,
         .PhotoView-Slider__ArrowRight:active {
           transform: scale(0.95) !important;
         }
-        
+
         .PhotoView-Slider__ArrowLeft svg,
         .PhotoView-Slider__ArrowRight svg {
           width: 24px !important;
           height: 24px !important;
           color: white !important;
         }
-        
+
         /* Position adjustments */
         .PhotoView-Slider__ArrowLeft {
           left: 16px !important;
         }
-        
+
         .PhotoView-Slider__ArrowRight {
           right: 16px !important;
         }
-        
+
         /* Toolbar styling */
         .PhotoView-Slider__toolbarIcon {
           width: 40px !important;
           height: 40px !important;
           border-radius: 50% !important;
-          background: rgba(255, 255, 255, 0.1) !important;
-          backdrop-filter: blur(8px) !important;
           display: flex !important;
           align-items: center !important;
           justify-content: center !important;
           transition: all 0.2s ease !important;
         }
-        
+
         .PhotoView-Slider__toolbarIcon:hover {
           background: rgba(255, 255, 255, 0.2) !important;
         }
-        
+
         /* Close button */
         .PhotoView-Slider__BannerWrap {
           background: transparent !important;
@@ -464,10 +504,11 @@ export function ImageGrid({
               Hướng dẫn tải ảnh
             </DialogTitle>
             <DialogDescription>
-              Trình duyệt của bạn không hỗ trợ tải trực tiếp. Vui lòng làm theo hướng dẫn:
+              Trình duyệt của bạn không hỗ trợ tải trực tiếp. Vui lòng làm theo
+              hướng dẫn:
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-2">
             {/* Option 1: Long press */}
             <div className="flex gap-3 p-3 rounded-2xl bg-muted/50">
@@ -477,7 +518,8 @@ export function ImageGrid({
               <div>
                 <p className="font-medium text-sm">Cách 1: Nhấn giữ ảnh</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Nhấn vào nút bên dưới, sau đó <strong>nhấn giữ</strong> vào ảnh và chọn "Lưu ảnh"
+                  Nhấn vào nút bên dưới, sau đó <strong>nhấn giữ</strong> vào
+                  ảnh và chọn "Lưu ảnh"
                 </p>
               </div>
             </div>
@@ -488,9 +530,12 @@ export function ImageGrid({
                 <ExternalLink className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="font-medium text-sm">Cách 2: Mở bằng trình duyệt</p>
+                <p className="font-medium text-sm">
+                  Cách 2: Mở bằng trình duyệt
+                </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Nhấn <strong>⋮</strong> hoặc <strong>...</strong> ở góc trên → chọn "Mở bằng Safari/Chrome"
+                  Nhấn <strong>⋮</strong> hoặc <strong>...</strong> ở góc trên →
+                  chọn "Mở bằng Safari/Chrome"
                 </p>
               </div>
             </div>
@@ -507,7 +552,7 @@ export function ImageGrid({
             <Button
               className="flex-1 rounded-full gap-2"
               onClick={() => {
-                window.open(downloadUrl, '_blank');
+                window.open(downloadUrl, "_blank");
                 setShowDownloadHelp(false);
               }}
             >

@@ -14,6 +14,12 @@ class UserProfileData(BaseModel):
     """User profile data - school, phone_number, etc."""
     school: Optional[str] = None
     phone_number: Optional[str] = None
+    student_id: Optional[str] = None
+    class_name: Optional[str] = None
+    description: Optional[str] = None
+    
+    class Config:
+        extra = "allow"  # Allow additional fields
 
 
 class JWTPayload(BaseModel):
