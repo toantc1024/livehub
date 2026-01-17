@@ -3,6 +3,7 @@ Admin router - Statistics and management endpoints.
 """
 
 from typing import Optional, List
+from datetime import datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, UploadFile, File, Query, HTTPException, status
@@ -48,6 +49,8 @@ class UserListItem(BaseModel):
     name: Optional[str] = None
     email: str
     avatarUrl: Optional[str] = None
+    profileData: Optional[dict] = None
+    createdAt: datetime
 
     class Config:
         from_attributes = True
@@ -77,6 +80,10 @@ async def get_stats(
         select(func.count()).select_from(Image).where(Image.status == ImageStatus.ERROR)
     )
     
+    # Sum view and download counts
+    total_views = await db.scalar(select(func.sum(Image.viewCount))) or 0
+    total_downloads = await db.scalar(select(func.sum(Image.downloadCount))) or 0
+    
     # Count faces
     face_total = await db.scalar(select(func.count()).select_from(Face))
     face_assigned = await db.scalar(
@@ -92,6 +99,8 @@ async def get_stats(
             "processing": img_processing or 0,
             "ready": img_ready or 0,
             "error": img_error or 0,
+            "totalViews": total_views,
+            "totalDownloads": total_downloads,
         },
         faces={
             "total": face_total or 0,

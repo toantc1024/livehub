@@ -153,6 +153,28 @@ export const api = {
   },
 
   /**
+   * Increment view count (public).
+   */
+  async incrementViewCount(imageId: string): Promise<void> {
+    try {
+      await fetch(apiUrl(`/images/public/${imageId}/view`), { method: "POST" });
+    } catch (error) {
+      console.error("Failed to increment view count", error);
+    }
+  },
+
+  /**
+   * Increment download count (public).
+   */
+  async incrementDownloadCount(imageId: string): Promise<void> {
+    try {
+      await fetch(apiUrl(`/images/public/${imageId}/download`), { method: "POST" });
+    } catch (error) {
+      console.error("Failed to increment download count", error);
+    }
+  },
+
+  /**
    * Register face.
    */
   async registerFace(file: File): Promise<any> {

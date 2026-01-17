@@ -16,6 +16,8 @@ import {
   Image as ImageIcon, 
   Shield, 
   RefreshCw,
+  Eye,
+  Download,
 } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -39,7 +41,14 @@ const adminCards = [
 ];
 
 interface Stats {
-  images: { total: number; processing: number; ready: number; error: number };
+  images: { 
+    total: number; 
+    processing: number; 
+    ready: number; 
+    error: number;
+    totalViews: number;
+    totalDownloads: number;
+  };
   faces: { total: number; assigned: number; unassigned: number };
   users: { total: number };
 }
@@ -214,9 +223,11 @@ export default function AdminPage() {
           ) : stats ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Quick stats cards */}
-              <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-3 gap-4">
                 {[
-                  { label: "Tổng ảnh", value: stats.images.total, icon: ImageIcon, color: "text-blue-500" },
+                  { label: "Tổng lượt xem", value: stats.images.totalViews, icon: Eye, color: "text-blue-500" },
+                  { label: "Lượt tải", value: stats.images.totalDownloads, icon: Download, color: "text-indigo-500" },
+                  { label: "Tổng ảnh", value: stats.images.total, icon: ImageIcon, color: "text-cyan-500" },
                   { label: "Khuôn mặt", value: stats.faces.total, icon: Users, color: "text-purple-500" },
                   { label: "Đã gán", value: stats.faces.assigned, icon: Shield, color: "text-green-500" },
                   { label: "Người dùng", value: stats.users.total, icon: Users, color: "text-orange-500" },

@@ -207,6 +207,46 @@ async def get_public_image(
     return ImageResponse.model_validate(image)
 
 
+@router.post("/public/{image_id}/view")
+async def increment_view_count(
+    image_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Increment view count for an image - PUBLIC.
+    """
+    result = await db.execute(select(Image).where(Image.id == image_id))
+    image = result.scalar_one_or_none()
+    
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    image.viewCount += 1
+    await db.commit()
+    
+    return {"message": "View count incremented", "viewCount": image.viewCount}
+
+
+@router.post("/public/{image_id}/download")
+async def increment_download_count(
+    image_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Increment download count for an image - PUBLIC.
+    """
+    result = await db.execute(select(Image).where(Image.id == image_id))
+    image = result.scalar_one_or_none()
+    
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    image.downloadCount += 1
+    await db.commit()
+    
+    return {"message": "Download count incremented", "downloadCount": image.downloadCount}
+
+
 # ==================
 # Authenticated Endpoints
 # ==================

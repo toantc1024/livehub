@@ -1,11 +1,20 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Download, ZoomIn, RefreshCw, Loader2, Image as ImageIcon } from "lucide-react";
+import { Download, ZoomIn, RefreshCw, Loader2, Image as ImageIcon, Smartphone, ExternalLink, Hand } from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 
 export interface ImageItem {
   id: string;
@@ -36,8 +45,6 @@ export function ImageSkeleton() {
     </div>
   );
 }
-
-// ... imports ...
 
 // Helper component for card content to avoid duplication
 const BLUR_DATA_URL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAUH/8QAIhAAAQMDBAMAAAAAAAAAAAAAAQIDBAAFEQYSITEHE0H/xAAVAQEBAAAAAAAAAAAAAAAAAAADBf/EABkRAAIDAQAAAAAAAAAAAAAAAAECAAMRIf/aAAwDAQACEQMRAD8AqeM9Y3e43q8RLncJE2LBWGo6HlFQYSpIUck9kk/KKUrDLJkyJUd//9k=";
@@ -73,6 +80,10 @@ const ImageCardContent = ({
       }`}
       sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
       onLoad={() => onLoad(image.id)}
+      onClick={() => {
+        // Increment view count when clicking the image (opens lightbox)
+        api.incrementViewCount(image.id);
+      }}
     />
 
     {/* Overlay with Download Button at Bottom Left/Right */}
@@ -110,16 +121,42 @@ export function ImageGrid({
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
+  const [showDownloadHelp, setShowDownloadHelp] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState<string>("");
 
   const handleImageLoad = (imageId: string) => {
     setLoadedImages((prev) => new Set(prev).add(imageId));
   };
   
-  useEffect(() => {
-  }, [images])
-  // ... existing handleDownload ...
+  // Check if device needs special download handling
+  const needsDownloadHelp = () => {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent;
+    // Detect iOS
+    const isIOS = /iPad|iPhone|iPod/.test(ua);
+    // Detect in-app browsers (Zalo, Facebook, Messenger, Instagram, etc.)
+    const isInAppBrowser = /FBAN|FBAV|Instagram|Zalo|Line|Twitter|Snapchat/i.test(navigator.userAgent);
+    // Detect Android WebView
+    const isAndroidWebView = /wv\)/.test(ua);
+    return isIOS || isInAppBrowser || isAndroidWebView;
+  };
+  
   const handleDownload = async (url: string, filename: string) => {
+    // Find image ID to increment count
+    const image = images.find(img => img.originalUrl === url);
+    if (image) {
+        api.incrementDownloadCount(image.id);
+    }
+    
     try {
+      // For iOS and in-app browsers, show instruction dialog
+      if (needsDownloadHelp()) {
+        setDownloadUrl(url);
+        setShowDownloadHelp(true);
+        return;
+      }
+      
+      // Standard download for desktop browsers
       const response = await fetch(url);
       const blob = await response.blob();
       const link = document.createElement("a");
@@ -131,10 +168,12 @@ export function ImageGrid({
       URL.revokeObjectURL(link.href);
     } catch (error) {
       console.error("Download failed:", error);
+      // Fallback: show instruction dialog
+      setDownloadUrl(url);
+      setShowDownloadHelp(true);
     }
   };
 
-  // ... existing useEffect ...
   useEffect(() => {
     if (observerRef.current) {
       observerRef.current.disconnect();
@@ -167,7 +206,6 @@ export function ImageGrid({
   }, [hasMore, isLoadingMore, onLoadMore]);
 
   if (isLoading) {
-    // ... skeleton return ...
     return (
       <div className={gridClassName}>
         {[...Array(12)].map((_, i) => (
@@ -187,7 +225,6 @@ export function ImageGrid({
   }
 
   if (images.length === 0) {
-    // ... empty state return ...
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -417,6 +454,69 @@ export function ImageGrid({
           background: transparent !important;
         }
       `}</style>
+
+      {/* Download Help Dialog for iOS and In-App Browsers */}
+      <Dialog open={showDownloadHelp} onOpenChange={setShowDownloadHelp}>
+        <DialogContent className="max-w-sm rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Smartphone className="h-5 w-5 text-primary" />
+              Hướng dẫn tải ảnh
+            </DialogTitle>
+            <DialogDescription>
+              Trình duyệt của bạn không hỗ trợ tải trực tiếp. Vui lòng làm theo hướng dẫn:
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-2">
+            {/* Option 1: Long press */}
+            <div className="flex gap-3 p-3 rounded-2xl bg-muted/50">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Hand className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">Cách 1: Nhấn giữ ảnh</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Nhấn vào nút bên dưới, sau đó <strong>nhấn giữ</strong> vào ảnh và chọn "Lưu ảnh"
+                </p>
+              </div>
+            </div>
+
+            {/* Option 2: Open in browser */}
+            <div className="flex gap-3 p-3 rounded-2xl bg-muted/50">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <ExternalLink className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">Cách 2: Mở bằng trình duyệt</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Nhấn <strong>⋮</strong> hoặc <strong>...</strong> ở góc trên → chọn "Mở bằng Safari/Chrome"
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Button
+              variant="outline"
+              className="flex-1 rounded-full"
+              onClick={() => setShowDownloadHelp(false)}
+            >
+              Đóng
+            </Button>
+            <Button
+              className="flex-1 rounded-full gap-2"
+              onClick={() => {
+                window.open(downloadUrl, '_blank');
+                setShowDownloadHelp(false);
+              }}
+            >
+              <ExternalLink className="h-4 w-4" />
+              Mở ảnh
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
