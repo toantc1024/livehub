@@ -34,7 +34,7 @@ export default function EmbedGalleryPage() {
       }
       
       try {
-        const res: ImageListResponse = await api.getRecentImages(pageNum, 12);
+        const res: ImageListResponse = await api.getPublicRecentImages(pageNum, 12);
         
         if (append && pageNum > 1) {
           setImages(prev => [...prev, ...res.items]);
@@ -116,6 +116,7 @@ export default function EmbedGalleryPage() {
             isLoadingMore={isLoadingMore}
             hasMore={page < totalPages}
             onLoadMore={handleLoadMore}
+            gridClassName="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4"
             emptyMessage="Chưa có ảnh nào"
             emptySubMessage="Thư viện ảnh đang trống."
         />
