@@ -65,8 +65,8 @@ services:
       - MINIO_BUCKET=livehub
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - SIMILARITY_THRESHOLD=0.6
-      - CORS_ORIGINS=["https://livehub.yhcmute.com"]
+      - SIMILARITY_THRESHOLD=0.8
+      - CORS_ORIGINS=${CORS_ORIGINS:-["https://livehub.yhcmute.com", "http://localhost:3000"]}
     depends_on:
       livehub-db:
         condition: service_healthy

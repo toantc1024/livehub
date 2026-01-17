@@ -8,9 +8,12 @@ import { AuroraText } from "@/components/ui/aurora-text";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
-import { Camera, Users, Sparkles, ArrowRight } from "lucide-react";
+import { Camera, Users, Sparkles, ArrowRight, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { ImageGrid, ImageItem } from "@/components/gallery/image-grid";
 
 const ease = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -62,6 +65,62 @@ const features = [
 
 export default function HomePage() {
   const { isAuthenticated, isLoading, login, user, isAdmin } = useAuth();
+  const [recentImages, setRecentImages] = useState<ImageItem[]>([]);
+  const [isLoadingImages, setIsLoadingImages] = useState(true);
+
+  // Placeholder blur data
+  const BLUR_DATA_URL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAUH/8QAIhAAAQMDBAMAAAAAAAAAAAAAAQIDBAAFEQYSITEHE0H/xAAVAQEBAAAAAAAAAAAAAAAAAAADBf/EABkRAAIDAQAAAAAAAAAAAAAAAAECAAMRIf/aAAwDAQACEQMRAD8AqeM9Y3e43q8RLncJE2LBWGo6HlFQYSpIUck9kk/KKUrDLJkyJUd//9k=";
+
+  // Map example images
+  const exampleImageItems: ImageItem[] = exampleImages.map((img, i) => ({
+      id: `example-${i}`,
+      filename: img.alt,
+      originalUrl: img.src,
+      status: "active",
+      createdAt: new Date().toISOString(),
+      imageData: {
+        blurDataURL: BLUR_DATA_URL
+      },
+  }));
+
+  useEffect(() => {
+    async function fetchImages() {
+      if (isAuthenticated) {
+        try {
+          setIsLoadingImages(true);
+          const res = await api.getRecentImages(1, 6);
+          setRecentImages(res.items || []);
+        } catch (error) {
+          console.error(error);
+          setRecentImages([]);
+        } finally {
+            setIsLoadingImages(false);
+        }
+      } else {
+        setIsLoadingImages(false); // No loading if not auth, just show examples immediately
+        setRecentImages([]);
+      }
+    }
+    // Only fetch if authenticated to avoid 401 calls (though 401 is handled)
+    fetchImages();
+  }, [isAuthenticated]);
+
+  // If authenticated and have images, use them. Otherwise fallback to examples.
+  // Actually, if authenticated but no images, we might want to show empty state or examples?
+  // Let's show examples if no real images found to keep the page looking good?
+  // User asked: "The same for những khoản khắc đáng nhớ in main page".
+  // If user has no images, maybe show examples? But "force login" implies seeing REAL content.
+  // If logged in and empty -> existing behavior in gallery is empty state.
+  // But for Homepage (Landing), empty state looks bad.
+  // Let's stick to logic: Auth & Have Images -> Show Real. Else -> Show Examples.
+  
+  const displayImages = (isAuthenticated && recentImages.length > 0) ? recentImages : exampleImageItems;
+  const isUsingRealImages = isAuthenticated && recentImages.length > 0;
+  
+  // If not using real images (meaning either not auth OR auth but empty), should we force login?
+  // Request says: "if user not logged in, force user to login".
+  // So if !isAuthenticated -> force login on click.
+  const handleImageClick = !isAuthenticated ? () => login() : undefined;
 
   return (
     <div className="min-h-screen relative flex flex-col overflow-hidden">
@@ -194,51 +253,42 @@ export default function HomePage() {
           ))}
         </motion.div>
 
-        {/* Example Images Gallery */}
+        {/* Example Images Gallery / Recent Moments */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.8, ease }}
         >
-          <div className="flex items-center justify-between max-w-5xl mx-auto mb-8">
-            <h2 className="text-2xl font-semibold">
+          <div className="flex items-center justify-between max-w-5xl mx-auto mb-8 px-2">
+            <h2 className="text-lg sm:text-2xl font-semibold truncate">
               Những khoảnh khắc đáng nhớ
             </h2>
-            <a
-              href="https://livehub.yhcmute.com/gallery/all-photos"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button variant="ghost" className="rounded-full group">
-                Xem tất cả
-                <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </Button>
-            </a>
+            {isAuthenticated ? (
+                <Link href="/gallery/my-photos">
+                  <Button variant="ghost" className="rounded-full group flex-shrink-0">
+                    <span className="hidden sm:inline">Xem tất cả</span>
+                    <span className="sm:hidden">Xem</span>
+                    <ArrowRight className="ml-1 sm:ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                </Link>
+            ) : (
+                <Button variant="ghost" onClick={login} className="rounded-full group flex-shrink-0">
+                  <span className="hidden sm:inline">Xem tất cả</span>
+                  <span className="sm:hidden">Xem</span>
+                  <ArrowRight className="ml-1 sm:ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                </Button>
+            )}
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-5xl mx-auto">
-            {exampleImages.map((image, index) => (
-              <motion.div
-                key={index}
-                className="relative aspect-[4/3] rounded-2xl overflow-hidden group cursor-pointer"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.4, delay: 0.9 + index * 0.1, ease }}
-                whileHover={{ scale: 1.02 }}
-              >
-                <Image
-                  src={image.src}
-                  alt={image.alt}
-                  fill
-                  className="object-cover transition-transform duration-500 group-hover:scale-110"
-                  sizes="(max-width: 768px) 50vw, 33vw"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                <div className="absolute bottom-0 left-0 right-0 p-4 text-white transform translate-y-full group-hover:translate-y-0 transition-transform duration-300">
-                  <p className="text-sm font-medium">{image.alt}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+          
+           <div className="max-w-5xl mx-auto px-2">
+             <ImageGrid
+                 images={displayImages}
+                 isLoading={isAuthenticated && isLoadingImages}
+                 hasMore={false}
+                 gridClassName="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4"
+                 onImageClick={handleImageClick}
+             />
+           </div>
         </motion.div>
       </main>
 

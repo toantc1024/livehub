@@ -20,11 +20,15 @@ import {
   X,
   FolderOpen,
 } from "lucide-react";
-import { ImageWithFallback } from "@/components/ui/image-with-fallback";
+// import { ImageWithFallback } from "@/components/ui/image-with-fallback"; // Removed as per request
+import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { useDropzone } from "react-dropzone";
+
+// Blur placeholder - same as gallery
+const BLUR_DATA_URL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAUH/8QAIhAAAQMDBAMAAAAAAAAAAAAAAQIDBAAFEQYSITEHE0H/xAAVAQEBAAAAAAAAAAAAAAAAAAADBf/EABkRAAIDAQAAAAAAAAAAAAAAAAECAAMRIf/aAAwDAQACEQMRAD8AqeM9Y3e43q8RLncJE2LBWGo6HlFQYSpIUck9kk/KKUrDLJkyJUd//9k=";
 
 interface ImageItem {
   id: string;
@@ -384,13 +388,15 @@ export default function AdminImagesPage() {
                         }`}
                       onClick={() => toggleSelect(image.id)}
                     >
-                      <ImageWithFallback
+                      <Image
                         src={image.originalUrl}
                         alt={image.filename}
                         fill
                         className="object-cover"
                         sizes="(max-width: 768px) 50vw, 20vw"
-                        blurDataURL={image.imageData?.blurDataURL}
+                        placeholder="blur"
+                        blurDataURL={BLUR_DATA_URL}
+                        unoptimized
                       />
 
                       {/* Selection checkbox */}

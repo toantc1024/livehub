@@ -67,10 +67,10 @@ export function SchoolSelector({
 
   return (
     <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger className={cn("rounded-xl h-11", className)}>
-        <SelectValue placeholder={placeholder} />
+      <SelectTrigger className={cn("rounded-xl h-11 w-full", className)}>
+        <SelectValue placeholder={placeholder} className="truncate" />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
         {/* Search input inside dropdown */}
         <div className="px-2 py-2 sticky top-0 bg-popover border-b">
           <div className="relative">
@@ -93,8 +93,12 @@ export function SchoolSelector({
             </div>
           ) : (
             filteredSchools.map((school) => (
-              <SelectItem key={school.value} value={school.value}>
-                {school.label}
+              <SelectItem 
+                key={school.value} 
+                value={school.value}
+                className="truncate max-w-full"
+              >
+                <span className="truncate block">{school.label}</span>
               </SelectItem>
             ))
           )}

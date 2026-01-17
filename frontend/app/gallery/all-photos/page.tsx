@@ -1,29 +1,14 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
 import {
-  Download,
-  ImageIcon,
-  RefreshCw,
-  ZoomIn,
-  Loader2,
   ExternalLink,
   Images,
   User,
 } from "lucide-react";
-import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
-import { PhotoProvider, PhotoView } from "react-photo-view";
-import "react-photo-view/dist/react-photo-view.css";
-
-interface ImageItem {
-  id: string;
-  filename: string;
-  originalUrl: string;
-  status: string;
-  createdAt: string;
-}
+import Link from "next/link";
+import { ImageGrid, ImageItem } from "@/components/gallery/image-grid";
 
 interface ImageListResponse {
   items: ImageItem[];
@@ -31,15 +16,6 @@ interface ImageListResponse {
   page: number;
   page_size: number;
   pages: number;
-}
-
-// Skeleton loader component for images
-function ImageSkeleton() {
-  return (
-    <div className="aspect-square rounded-2xl bg-gradient-to-br from-muted to-muted/50 animate-pulse relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent skeleton-shimmer" />
-    </div>
-  );
 }
 
 export default function AllPhotosPage() {
@@ -50,10 +26,6 @@ export default function AllPhotosPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [filter, setFilter] = useState<"all" | "my-face">("all");
-  const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
-  
-  const observerRef = useRef<IntersectionObserver | null>(null);
-  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const fetchImages = useCallback(
     async (pageNum: number, filterType: "all" | "my-face", append = false) => {
@@ -95,65 +67,17 @@ export default function AllPhotosPage() {
     fetchImages(1, filter);
   }, [fetchImages, filter]);
 
-  // Infinite scroll observer
-  useEffect(() => {
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-    }
-
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        if (entry.isIntersecting && !isLoadingMore && page < totalPages) {
-          fetchImages(page + 1, filter, true);
-        }
-      },
-      {
-        rootMargin: "200px",
-        threshold: 0.1,
-      }
-    );
-
-    if (loadMoreRef.current) {
-      observerRef.current.observe(loadMoreRef.current);
-    }
-
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
-    };
-  }, [page, totalPages, isLoadingMore, filter, fetchImages]);
-
   const handleFilterChange = (newFilter: "all" | "my-face") => {
     setFilter(newFilter);
     setPage(1);
-    setImages([]);
-    setLoadedImages(new Set());
+    // setImages([]); // Let ImageGrid handle loading state visually, or clear it if you want transition
+    // Better UX: keep images until new ones load or show skeleton
   };
 
-  const handleImageLoad = (imageId: string) => {
-    setLoadedImages(prev => new Set(prev).add(imageId));
-  };
-
-  const handleDownload = async (url: string, filename: string) => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
-    } catch (error) {
-      console.error("Download failed:", error);
+  const handleLoadMore = () => {
+    if (!isLoadingMore && page < totalPages) {
+      fetchImages(page + 1, filter, true);
     }
-  };
-
-  const handleOpenMainSite = () => {
-    window.open("https://livehub.yhcmute.com", "_blank");
   };
 
   return (
@@ -207,184 +131,60 @@ export default function AllPhotosPage() {
                 </button>
               </div>
 
-              {/* Open in new tab button */}
-              <button
-                onClick={handleOpenMainSite}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
-              >
-                <ExternalLink className="h-3 w-3" />
-                <span className="hidden sm:inline">Xem tất cả</span>
-              </button>
+              {/* View All Button - User request: "do not open new tab but use link in Nextjs" */}
+              {/* If this is embedded, it should open in new tab? But user directive says "When click Xem tất cả ảnh do not open new tab but use link in Nextjs" for this file. 
+                  Maybe user intends this page to be part of the main app navigation now. 
+                  However, "Xem tất cả" button usually implies going to gallery root or similar. 
+                  Wait, THIS IS the "All Photos" page. Why is there a "Xem tất cả" button here?
+                  In `embed-gallery`, "Xem tất cả" leads to main site.
+                  In `gallery` (main), "Xem tất cả" leads to THIS page (or my-photos).
+                  
+                  If I am ON `all-photos` page, what does "Xem tất cả" button do?
+                  Maybe it's redundant? Or maybe it links to filtered view?
+                  The existing code had `handleOpenMainSite`.
+                  User might mean: "Use link in Nextjs" to avoid full reload if possible, OR user implies this page is now integrated.
+                  
+                  Let's assume user wants it to be a Link to `/gallery` or `/gallery/my-photos`?
+                  Or simply remove it if we are already seeing all photos?
+                  But this page is designed as "Embed". It might be viewed in iframe.
+                  If it is in iframe, `Link` will navigate INSIDE iframe.
+                  If user wants "do not open new tab", it means navigation inside iframe?
+                  OR user thinks this page is the main gallery page.
+                  
+                  Let's look at `frontend/app/embed-gallery` request: "But Xem tất cả will open new tab".
+                  This file is `frontend/app/gallery/all-photos`.
+                  User said: "@[frontend/app/gallery/all-photos] ... When click Xem tất cả ảnh do not open new tab but use link in Nextjs".
+                  
+                  I will use Link to `/gallery` for now as "Home" or "Back".
+                  Or maybe the button text "Xem tất cả" is confusing here if we are already viewing it.
+                  Original code: `Xem tất cả` -> opens `livehub.yhcmute.com` (Main site).
+                  So maybe this is "Go to Main Site".
+                  If user says "do not open new tab", I'll use `Link href="/"`.
+              */}
+              <Link href="/gallery">
+                 <button
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  <span className="hidden sm:inline">Xem tất cả</span>
+                </button>
+              </Link>
             </div>
           </div>
         </div>
       </header>
-
+      
       <main className="container py-4 px-2 sm:px-4">
-        {/* Loading state */}
-        {isLoadingImages ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3">
-            {[...Array(12)].map((_, i) => (
-              <ImageSkeleton key={i} />
-            ))}
-          </div>
-        ) : images.length === 0 ? (
-          /* Empty state */
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col items-center justify-center py-20 text-center"
-          >
-            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
-              <ImageIcon className="h-10 w-10 text-primary" />
-            </div>
-            <h2 className="text-lg font-semibold mb-2">
-              {filter === "my-face"
-                ? "Chưa có ảnh nào có khuôn mặt của bạn"
-                : "Chưa có ảnh nào"}
-            </h2>
-            <p className="text-muted-foreground text-sm max-w-md">
-              {filter === "my-face"
-                ? "Hệ thống chưa tìm thấy ảnh nào có khuôn mặt của bạn."
-                : "Thư viện ảnh đang trống."}
-            </p>
-          </motion.div>
-        ) : (
-          /* Photo Grid with Lazy Loading */
-          <>
-            <PhotoProvider
-              toolbarRender={({ onScale, scale, onRotate, rotate, index }) => {
-                const currentImage = images[index];
-                return (
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="PhotoView-Slider__toolbarIcon"
-                      onClick={() => onScale(scale + 0.5)}
-                    >
-                      <ZoomIn className="h-5 w-5" />
-                    </button>
-                    <button
-                      className="PhotoView-Slider__toolbarIcon"
-                      onClick={() => onRotate(rotate + 90)}
-                    >
-                      <RefreshCw className="h-5 w-5" />
-                    </button>
-                    {currentImage && (
-                      <button
-                        className="PhotoView-Slider__toolbarIcon"
-                        onClick={() =>
-                          handleDownload(
-                            currentImage.originalUrl,
-                            currentImage.filename
-                          )
-                        }
-                      >
-                        <Download className="h-5 w-5" />
-                      </button>
-                    )}
-                  </div>
-                );
-              }}
-            >
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
-                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3"
-              >
-                <AnimatePresence mode="popLayout">
-                  {images.map((image, index) => (
-                    <motion.div
-                      key={image.id}
-                      layout
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      transition={{ duration: 0.3, delay: Math.min(index * 0.02, 0.2) }}
-                    >
-                      <PhotoView src={image.originalUrl}>
-                        <div className="group relative aspect-square rounded-2xl overflow-hidden bg-muted cursor-zoom-in">
-                          {/* Loading placeholder */}
-                          {!loadedImages.has(image.id) && (
-                            <div className="absolute inset-0 bg-gradient-to-br from-muted to-muted/50 animate-pulse">
-                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent skeleton-shimmer" />
-                            </div>
-                          )}
-                          
-                          <Image
-                            src={image.originalUrl}
-                            alt={image.filename}
-                            fill
-                            unoptimized
-                            className={`object-cover transition-all duration-300 group-hover:scale-105 ${
-                              loadedImages.has(image.id) ? "opacity-100" : "opacity-0"
-                            }`}
-                            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
-                            onLoad={() => handleImageLoad(image.id)}
-                          />
-                          
-                          {/* Overlay */}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-                              <span className="text-white text-xs truncate max-w-[70%]">
-                                {image.filename}
-                              </span>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDownload(
-                                    image.originalUrl,
-                                    image.filename
-                                  );
-                                }}
-                                className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors flex-shrink-0"
-                              >
-                                <Download className="h-3 w-3 text-white" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </PhotoView>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </motion.div>
-            </PhotoProvider>
-
-            {/* Load more trigger & indicator */}
-            <div 
-              ref={loadMoreRef} 
-              className="flex items-center justify-center py-8"
-            >
-              {isLoadingMore ? (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span className="text-sm">Đang tải thêm...</span>
-                </div>
-              ) : page >= totalPages && images.length > 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Đã hiển thị tất cả {total} ảnh
-                </p>
-              ) : null}
-            </div>
-          </>
-        )}
+         <ImageGrid 
+            images={images}
+            isLoading={isLoadingImages}
+            isLoadingMore={isLoadingMore}
+            hasMore={page < totalPages}
+            onLoadMore={handleLoadMore}
+            emptyMessage={filter === "my-face" ? "Chưa có ảnh nào có khuôn mặt của bạn" : "Chưa có ảnh nào"}
+            emptySubMessage={filter === "my-face" ? "Hệ thống chưa tìm thấy ảnh nào có khuôn mặt của bạn." : "Thư viện ảnh đang trống."}
+         />
       </main>
-
-      {/* Custom styles for skeleton shimmer */}
-      <style jsx global>{`
-        @keyframes shimmer {
-          0% {
-            transform: translateX(-100%);
-          }
-          100% {
-            transform: translateX(100%);
-          }
-        }
-        .skeleton-shimmer {
-          animation: shimmer 1.5s infinite;
-        }
-      `}</style>
     </div>
   );
 }
