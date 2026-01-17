@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
 
@@ -344,25 +344,9 @@ export default function MyPhotosPage() {
                 );
               }}
             >
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
-                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3 md:gap-4"
-              >
-                <AnimatePresence mode="popLayout">
-                  {images.map((image, index) => (
-                    <motion.div
-                      key={image.id}
-                      layout
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      transition={{
-                        duration: 0.3,
-                        delay: Math.min(index * 0.02, 0.3),
-                      }}
-                    >
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
+                  {images.map((image) => (
+                    <div key={image.id}>
                       <PhotoView src={image.originalUrl}>
                         <div className="group relative aspect-square rounded-2xl overflow-hidden bg-muted cursor-zoom-in">
                           {/* Loading placeholder */}
@@ -408,10 +392,9 @@ export default function MyPhotosPage() {
                           </div>
                         </div>
                       </PhotoView>
-                    </motion.div>
+                    </div>
                   ))}
-                </AnimatePresence>
-              </motion.div>
+              </div>
             </PhotoProvider>
 
             {/* Load more trigger & indicator */}
