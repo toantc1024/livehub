@@ -78,7 +78,7 @@ export default function PublicGalleryPage() {
       <Navbar />
       
       {/* Header */}
-      <header className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b border-border/50">
+      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/50">
         <div className="container py-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
