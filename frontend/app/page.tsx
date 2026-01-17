@@ -42,24 +42,25 @@ export default function HomePage() {
 
   useEffect(() => {
     async function fetchImages() {
-      if (isAuthenticated) {
-        try {
-          setIsLoadingImages(true);
-          const res = await api.getRecentImages(1, 6);
-          setRecentImages(res.items || []);
-        } catch (error) {
-          console.error(error);
-          setRecentImages([]);
-        } finally {
-            setIsLoadingImages(false);
-        }
-      } else {
-        setIsLoadingImages(false); 
+      try {
+        setIsLoadingImages(true);
+        // Use authenticated endpoint if logged in, public endpoint otherwise
+        const res = isAuthenticated
+          ? await api.getRecentImages(1, 6)
+          : await api.getPublicRecentImages(1, 6);
+        setRecentImages(res.items || []);
+      } catch (error) {
+        console.error(error);
         setRecentImages([]);
+      } finally {
+        setIsLoadingImages(false);
       }
     }
-    fetchImages();
-  }, [isAuthenticated]);
+    // Only fetch after auth loading is complete
+    if (!isLoading) {
+      fetchImages();
+    }
+  }, [isAuthenticated, isLoading]);
   
   const displayImages = recentImages;
   
@@ -227,7 +228,7 @@ export default function HomePage() {
            <div className="max-w-5xl mx-auto px-2">
              <ImageGrid
                  images={displayImages}
-                 isLoading={isAuthenticated && isLoadingImages}
+                 isLoading={isLoadingImages}
                  hasMore={false}
                  gridClassName="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4"
                  onImageClick={handleImageClick}
