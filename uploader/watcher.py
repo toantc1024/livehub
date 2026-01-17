@@ -27,16 +27,74 @@ class ImageHandler(FileSystemEventHandler):
     
     def __init__(self, on_new_file: Callable[[str], None]):
         self.on_new_file = on_new_file
+        # Debounce: track recently processed files to avoid duplicates
+        self._processed_files: dict = {}  # path -> timestamp
+        self._debounce_seconds = 2.0  # Ignore same file within 2 seconds
     
-    def on_created(self, event):
+    def _should_process(self, file_path: str) -> bool:
+        """Check if file should be processed (debounce check)."""
+        now = time.time()
+        last_processed = self._processed_files.get(file_path, 0)
+        
+        if now - last_processed < self._debounce_seconds:
+            return False  # Recently processed, skip
+        
+        self._processed_files[file_path] = now
+        
+        # Clean up old entries (older than 60 seconds)
+        old_paths = [p for p, t in self._processed_files.items() if now - t > 60]
+        for p in old_paths:
+            del self._processed_files[p]
+        
+        return True
+    
+    def _handle_file_event(self, event):
+        """Common handler for file events."""
         if event.is_directory:
             return
         
-        ext = Path(event.src_path).suffix.lower()
+        file_path = event.src_path
+        ext = Path(file_path).suffix.lower()
+        
         if ext in SUPPORTED_EXTENSIONS:
+            # Check if file exists and is accessible
+            if not Path(file_path).exists():
+                return
+            
+            if not self._should_process(file_path):
+                return  # Debounced
+            
             # Wait for file to be fully written
             time.sleep(0.5)
-            self.on_new_file(event.src_path)
+            
+            # Double-check file still exists after waiting
+            if Path(file_path).exists():
+                self.on_new_file(file_path)
+    
+    def on_created(self, event):
+        """Handle file creation event."""
+        self._handle_file_event(event)
+    
+    def on_modified(self, event):
+        """Handle file modification event - important for paste on Windows."""
+        self._handle_file_event(event)
+    
+    def on_moved(self, event):
+        """Handle file moved/renamed event."""
+        if event.is_directory:
+            return
+        
+        # For moved events, check the destination path
+        dest_path = event.dest_path
+        ext = Path(dest_path).suffix.lower()
+        
+        if ext in SUPPORTED_EXTENSIONS:
+            if not self._should_process(dest_path):
+                return
+            
+            time.sleep(0.5)
+            if Path(dest_path).exists():
+                self.on_new_file(dest_path)
 
 
 class FolderWatcher:

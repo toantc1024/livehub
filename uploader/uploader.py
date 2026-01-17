@@ -50,6 +50,10 @@ class UploaderApp(ctk.CTk):
         
         self._create_ui()
         self._check_auth()
+        
+        # Initialize file list if folder is already set
+        if self.watch_folder:
+            self.after(100, self._initialize_on_startup)
     
     def _load_settings(self):
         """Load saved settings."""
@@ -58,6 +62,13 @@ class UploaderApp(ctk.CTk):
         saved_token = storage.get_token()
         if saved_token:
             api.set_token(saved_token)
+    
+    def _initialize_on_startup(self):
+        """Initialize file list on startup if folder is already set."""
+        if self.watch_folder and Path(self.watch_folder).exists():
+            self._log(f"Thư mục: {self.watch_folder}")
+            self._scan_folder()
+            self._update_file_list()
     
     def _create_ui(self):
         """Create the UI."""
@@ -225,14 +236,22 @@ class UploaderApp(ctk.CTk):
             self._add_file_row(f)
 
     def _add_file_row(self, file_path: str):
+        # Skip if file doesn't exist
+        if not Path(file_path).exists():
+            return
+        
         row = ctk.CTkFrame(self.files_frame)
         row.pack(fill="x", pady=2)
         
         name = Path(file_path).name
         
-        # Status
-        file_hash = get_file_hash(file_path)
-        is_uploaded = file_hash in storage.get_uploaded_hashes()
+        # Status - with error handling
+        try:
+            file_hash = get_file_hash(file_path)
+            is_uploaded = file_hash in storage.get_uploaded_hashes()
+        except Exception:
+            is_uploaded = False
+        
         status_text = "Đã upload" if is_uploaded else "Chờ upload"
         status_color = "green" if is_uploaded else "orange"
         
@@ -361,16 +380,25 @@ class UploaderApp(ctk.CTk):
     
     def _on_new_file(self, file_path: str):
         """Handle new file detected."""
-        filename = Path(file_path).name
-        self._log(f"Phát hiện: {filename}")
+        # Run UI updates on main thread
+        def update_ui():
+            filename = Path(file_path).name
+            self._log(f"Phát hiện: {filename}")
+            
+            self.stats["pending"] = self.stats.get("pending", 0) + 1
+            self._update_stats()
+            
+            # Add file to list if not already there
+            if file_path not in self.file_rows:
+                self._add_file_row(file_path)
+            
+            self._update_file_status(file_path, "Chờ upload", "orange")
+            
+            if self.auto_upload.get():
+                self._upload_file(file_path)
         
-        self.stats["pending"] = self.stats.get("pending", 0) + 1
-        self._update_stats()
-        
-        self._update_file_status(file_path, "Chờ upload", "orange")
-        
-        if self.auto_upload.get():
-            self._upload_file(file_path)
+        # Schedule on main thread since watchdog runs in background thread
+        self.after(0, update_ui)
     
     def _toggle_watch(self):
         """Toggle folder watching."""
