@@ -67,6 +67,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth();
   }, []);
 
+  /**
+   * Decode JWT token to get user info locally.
+   * This is used as fallback when server is unreachable.
+   */
+  function decodeTokenLocally(token: string): User | null {
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      
+      // Check if token is expired
+      const exp = payload.exp * 1000; // Convert to milliseconds
+      if (Date.now() >= exp) {
+        return null;
+      }
+      
+      return {
+        id: payload.sub,
+        email: payload.email,
+        role: payload.role as Role,
+        name: payload.name,
+        avatarUrl: payload.avatar_url,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async function checkAuth() {
     setIsLoading(true);
     try {
@@ -83,15 +109,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: result.user.role as Role,
         });
       } else if (result.serverError) {
-        // Server/network error - keep current user state, don't logout
-        // User will still be able to use the app with cached state
-        console.warn("Server error during auth validation, keeping session");
+        // Server/network error - try to use JWT data locally
+        console.warn("Server error during auth validation, using local JWT data");
+        const localUser = decodeTokenLocally(token);
+        if (localUser) {
+          setUser(localUser);
+        } else {
+          // Token is expired or invalid
+          localStorage.removeItem("token");
+          setUser(null);
+        }
       } else {
         // Actual auth error (401/403) - token is invalid
         localStorage.removeItem("token");
         setUser(null);
       }
     } catch {
+      // Try fallback to local JWT decoding
+      const token = localStorage.getItem("token");
+      if (token) {
+        const localUser = decodeTokenLocally(token);
+        if (localUser) {
+          setUser(localUser);
+          return;
+        }
+      }
       localStorage.removeItem("token");
       setUser(null);
     } finally {

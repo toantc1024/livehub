@@ -195,7 +195,7 @@ async def google_login():
         "scope": "openid email profile",
         "access_type": "offline",
         "state": state,
-        "prompt": "consent",
+        "prompt": "select_account",
     }
     
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + "&".join(
@@ -335,7 +335,7 @@ async def google_login_desktop():
         "scope": "openid email profile",
         "access_type": "offline",
         "state": state,
-        "prompt": "consent",
+        "prompt": "select_account",
     }
     
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + "&".join(
