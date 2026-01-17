@@ -8,6 +8,10 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
+# Fix Debian mirrors by using HTTPS (some networks block HTTP to debian mirrors)
+RUN sed -i 's|http://|https://|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true && \
+    sed -i 's|http://|https://|g' /etc/apt/sources.list 2>/dev/null || true
+
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
@@ -33,10 +37,14 @@ FROM python:3.11-slim AS runtime
 # Set working directory
 WORKDIR /app
 
+# Fix Debian mirrors by using HTTPS
+RUN sed -i 's|http://|https://|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true && \
+    sed -i 's|http://|https://|g' /etc/apt/sources.list 2>/dev/null || true
+
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
