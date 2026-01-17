@@ -16,7 +16,7 @@ MAX_FILE_SIZE_MB = 8  # Target max file size in MB (nginx default is 10MB)
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 MAX_DIMENSION = 4096  # Max width/height in pixels
 MIN_QUALITY = 60  # Minimum JPEG quality to maintain
-START_QUALITY = 92  # Starting quality for optimization
+START_QUALITY = 85  # Starting quality for optimization
 QUALITY_STEP = 5  # Quality reduction step during optimization
 
 
