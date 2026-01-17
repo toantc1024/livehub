@@ -1,57 +1,91 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<"processing" | "success" | "error">("processing");
+  const processedRef = useRef(false);
 
   useEffect(() => {
+    // Prevent duplicate processing
+    if (processedRef.current) return;
+    
     const handleCallback = async () => {
       const token = searchParams.get("token");
       
-      if (token) {
-        try {
-          // Store token
-          localStorage.setItem("token", token);
-          
-          // Wait a bit to ensure localStorage is synced
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          // Verify token was stored correctly
-          const storedToken = localStorage.getItem("token");
-          if (storedToken !== token) {
-            console.error("Token storage failed");
-            setStatus("error");
-            router.replace("/?error=storage_failed");
-            return;
-          }
-          
-          // Decode JWT to get role
-          const payload = JSON.parse(atob(token.split(".")[1]));
-          const role = payload.role;
-          
-          setStatus("success");
-          
-          // Small delay to ensure state is stable before navigation
-          await new Promise(resolve => setTimeout(resolve, 50));
-          
-          // Redirect based on role
-          if (role === "ADMIN") {
-            router.replace("/admin");
-          } else {
-            router.replace("/gallery");
-          }
-        } catch (error) {
-          console.error("Auth callback error:", error);
-          setStatus("error");
-          localStorage.removeItem("token");
-          router.replace("/");
-        }
-      } else {
+      if (!token) {
         setStatus("error");
+        router.replace("/?error=auth_failed");
+        return;
+      }
+
+      // Mark as processed immediately
+      processedRef.current = true;
+      
+      try {
+        // Clear any existing token first
+        localStorage.removeItem("token");
+        
+        // Wait a bit to ensure clear is synced
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        // Store new token
+        localStorage.setItem("token", token);
+        
+        // Wait longer to ensure localStorage is fully synced across tabs
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Verify token was stored correctly (with retry)
+        let storedToken = localStorage.getItem("token");
+        let retryCount = 0;
+        while (storedToken !== token && retryCount < 3) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          storedToken = localStorage.getItem("token");
+          retryCount++;
+        }
+        
+        if (storedToken !== token) {
+          console.error("Token storage failed after retries");
+          setStatus("error");
+          processedRef.current = false;
+          router.replace("/?error=storage_failed");
+          return;
+        }
+        
+        // Decode JWT to get role
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        const role = payload.role;
+        
+        // Check token expiration
+        const exp = payload.exp * 1000;
+        if (Date.now() >= exp) {
+          console.error("Token is expired");
+          localStorage.removeItem("token");
+          setStatus("error");
+          processedRef.current = false;
+          router.replace("/?error=token_expired");
+          return;
+        }
+        
+        setStatus("success");
+        
+        // Longer delay to ensure auth context has time to pick up the new token
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Use window.location for a full page navigation to ensure fresh state
+        if (role === "ADMIN") {
+          window.location.href = "/admin";
+        } else {
+          window.location.href = "/gallery";
+        }
+      } catch (error) {
+        console.error("Auth callback error:", error);
+        setStatus("error");
+        localStorage.removeItem("token");
+        processedRef.current = false;
         router.replace("/?error=auth_failed");
       }
     };

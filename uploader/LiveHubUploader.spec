@@ -1,70 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""
-PyInstaller spec file for LiveHub Uploader
+from PyInstaller.utils.hooks import collect_all
 
-This is the detailed configuration for building the executable.
-You can customize build options here.
+datas = [('D:\\LiveHub\\uploader\\config.py', '.'), ('D:\\LiveHub\\uploader\\api_client.py', '.'), ('D:\\LiveHub\\uploader\\oauth.py', '.'), ('D:\\LiveHub\\uploader\\watcher.py', '.'), ('D:\\LiveHub\\uploader\\image_processor.py', '.'), ('D:\\LiveHub\\uploader\\storage.py', '.')]
+binaries = []
+hiddenimports = ['customtkinter', 'PIL', 'PIL._tkinter_finder', 'watchdog', 'watchdog.observers', 'watchdog.events', 'requests', 'google.auth', 'google_auth_oauthlib']
+tmp_ret = collect_all('customtkinter')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
-Usage: pyinstaller LiveHubUploader.spec
-"""
-
-import sys
-from pathlib import Path
-
-# Get customtkinter path for including assets
-import customtkinter
-ctk_path = Path(customtkinter.__file__).parent
 
 a = Analysis(
     ['uploader.py'],
     pathex=[],
-    binaries=[],
-    datas=[
-        # Include all customtkinter themes and assets
-        (str(ctk_path), 'customtkinter'),
-    ],
-    hiddenimports=[
-        'customtkinter',
-        'PIL',
-        'PIL._tkinter_finder',
-        'PIL.Image',
-        'PIL.ImageEnhance',
-        'PIL.ImageFilter',
-        'watchdog',
-        'watchdog.observers',
-        'watchdog.observers.polling',
-        'watchdog.events',
-        'requests',
-        'urllib3',
-        'charset_normalizer',
-        'certifi',
-        'google.auth',
-        'google.auth.transport',
-        'google.auth.transport.requests',
-        'google_auth_oauthlib',
-        'google_auth_oauthlib.flow',
-        'tkinter',
-        'tkinter.filedialog',
-        'tkinter.messagebox',
-    ],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[
-        'matplotlib',
-        'numpy',
-        'pandas',
-        'scipy',
-        'PyQt5',
-        'PyQt6',
-        'PySide2',
-        'PySide6',
-        'wx',
-    ],
+    excludes=[],
     noarchive=False,
     optimize=0,
 )
-
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -77,15 +33,13 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,              # Use UPX compression if available
+    upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,         # No console window (GUI app)
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # Uncomment and add icon path if you have one
-    # icon='icon.ico',
 )

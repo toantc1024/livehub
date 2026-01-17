@@ -186,12 +186,16 @@ export default function GalleryPage() {
                   : "Khám phá những bức ảnh mới nhất"}
               </p>
             </div>
-            <Link href="/gallery/my-photos">
+            <a
+              href="https://livehub.yhcmute.com/gallery/all-photos"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Button variant="ghost" className="rounded-full group/btn">
-                Xem tất cả
+                Xem tất cả ảnh
                 <ChevronRight className="ml-1 h-4 w-4 group-hover/btn:translate-x-1 transition-transform" />
               </Button>
-            </Link>
+            </a>
           </div>
 
           {isLoadingImages ? (

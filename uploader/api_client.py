@@ -6,7 +6,6 @@ from typing import Optional
 from pathlib import Path
 import os
 import requests
-from PIL import Image
 
 from config import API_URL
 
@@ -70,47 +69,46 @@ class APIClient:
             return result.get("user")
         return None
     
-    def upload_image(self, file_path: str, enhanced_image: Optional[Image.Image] = None) -> Optional[dict]:
-        """Upload image to API."""
+    def upload_image(self, file_path: str) -> Optional[dict]:
+        """
+        Upload image to API with automatic optimization.
+        
+        Images are automatically compressed to be under server limit
+        while maintaining highest possible quality.
+        """
         if not self.token:
             return None
         
-        upload_path = file_path
-        temp_file_path = None
-        
-        if enhanced_image:
-            import tempfile
-            # Create temp file, close it immediately so we can re-open it for reading
-            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
-                enhanced_image.save(tf.name, "JPEG", quality=95)
-                upload_path = tf.name
-                temp_file_path = tf.name
+        from image_processor import process_for_upload
         
         try:
-            with open(upload_path, "rb") as f:
-                filename = Path(file_path).name
-                resp = requests.post(
-                    f"{self.api_url}/images/upload",
-                    headers=self._headers(),
-                    files={"file": (filename, f, "image/jpeg")},
-                    timeout=60,
-                )
+            # Process and optimize image
+            img_bytes, filename, metadata = process_for_upload(file_path)
+            
+            # Create file-like object from bytes
+            import io
+            file_obj = io.BytesIO(img_bytes)
+            
+            # Upload
+            resp = requests.post(
+                f"{self.api_url}/images/upload",
+                headers=self._headers(),
+                files={"file": (filename, file_obj, "image/jpeg")},
+                timeout=120,  # Increased timeout for large files
+            )
             
             if resp.ok:
-                return resp.json()
+                result = resp.json()
+                result["_upload_metadata"] = metadata
+                return result
             else:
                 print(f"Upload failed: {resp.status_code} - {resp.text}")
                 return None
         except Exception as e:
             print(f"Upload error: {e}")
+            import traceback
+            traceback.print_exc()
             return None
-        finally:
-            # Clean up temp file
-            if temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.unlink(temp_file_path)
-                except Exception as e:
-                    print(f"Failed to delete temp file: {e}")
 
 
 # Global instance

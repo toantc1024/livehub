@@ -204,12 +204,16 @@ export default function HomePage() {
             <h2 className="text-2xl font-semibold">
               Những khoảnh khắc đáng nhớ
             </h2>
-            <Link href="/gallery/my-photos">
+            <a
+              href="https://livehub.yhcmute.com/gallery/all-photos"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Button variant="ghost" className="rounded-full group">
                 Xem tất cả
                 <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </Button>
-            </Link>
+            </a>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-5xl mx-auto">
             {exampleImages.map((image, index) => (

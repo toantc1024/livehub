@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useRef,
   ReactNode,
 } from "react";
 import { api } from "@/lib/api";
@@ -62,9 +63,28 @@ function checkNeedsProfileSetup(user: User | null): boolean {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const checkingRef = useRef(false);
+  const lastCheckRef = useRef<number>(0);
 
+  // Check auth on mount and when storage changes
   useEffect(() => {
     checkAuth();
+    
+    // Listen for storage changes (cross-tab sync)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "token") {
+        if (e.newValue) {
+          // Token was added/updated in another tab
+          checkAuth();
+        } else {
+          // Token was removed in another tab
+          setUser(null);
+        }
+      }
+    };
+    
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
   /**
@@ -94,7 +114,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function checkAuth() {
+    // Debounce - don't check if checked within last 500ms
+    const now = Date.now();
+    if (now - lastCheckRef.current < 500) {
+      return;
+    }
+    
+    // Prevent duplicate concurrent calls
+    if (checkingRef.current) {
+      return;
+    }
+    
+    checkingRef.current = true;
+    lastCheckRef.current = now;
     setIsLoading(true);
+    
     try {
       const token = localStorage.getItem("token");
       if (!token) {
@@ -102,30 +136,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // First, try to decode locally to validate token format and expiration
+      const localUser = decodeTokenLocally(token);
+      if (!localUser) {
+        // Token is expired or invalid format
+        localStorage.removeItem("token");
+        setUser(null);
+        return;
+      }
+
+      // Set user immediately from local decode for faster UX
+      setUser(localUser);
+
+      // Then validate with server in background
       const result = await api.validateToken();
       if (result.valid && result.user) {
+        // Update with full user data from server
         setUser({
           ...result.user,
           role: result.user.role as Role,
         });
       } else if (result.serverError) {
-        // Server/network error - try to use JWT data locally
+        // Server/network error - keep using local JWT data
         console.warn("Server error during auth validation, using local JWT data");
-        const localUser = decodeTokenLocally(token);
-        if (localUser) {
-          setUser(localUser);
-        } else {
-          // Token is expired or invalid
-          localStorage.removeItem("token");
-          setUser(null);
-        }
+        // localUser is already set above
       } else {
         // Actual auth error (401/403) - token is invalid
         localStorage.removeItem("token");
         setUser(null);
       }
     } catch {
-      // Try fallback to local JWT decoding
+      // Keep local user if already set, otherwise clear
       const token = localStorage.getItem("token");
       if (token) {
         const localUser = decodeTokenLocally(token);
@@ -138,6 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
     } finally {
       setIsLoading(false);
+      checkingRef.current = false;
     }
   }
 

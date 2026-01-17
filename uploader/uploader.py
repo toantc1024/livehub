@@ -15,7 +15,6 @@ from config import SUPPORTED_EXTENSIONS
 from api_client import api
 from oauth import oauth
 from watcher import FolderWatcher, get_file_hash
-from image_processor import beautify_image
 from storage import storage
 
 
@@ -401,19 +400,24 @@ class UploaderApp(ctk.CTk):
         
         filename = Path(file_path).name
         self._log(f"Uploading: {filename}")
-        self._update_file_status(file_path, "Đang upload...", "blue")
+        self._update_file_status(file_path, "Đang xử lý...", "blue")
         
         try:
-            enhanced = None
-            if self.enhance_enabled.get():
-                enhanced = beautify_image(file_path)
-            
-            result = api.upload_image(file_path, enhanced)
+            # Image optimization is now handled internally by api.upload_image
+            result = api.upload_image(file_path)
             
             if result and result.get("id"):
                 self.watcher.mark_uploaded(file_path)
                 file_hash = get_file_hash(file_path)
                 storage.add_uploaded_hash(file_hash)
+                
+                # Log optimization info if available
+                metadata = result.get("_upload_metadata", {})
+                if metadata:
+                    compression = metadata.get("compression_ratio", 0)
+                    quality = metadata.get("quality", 0)
+                    size_mb = metadata.get("optimized_file_size", 0) / 1024 / 1024
+                    self._log(f"  → Q{quality}% | {size_mb:.1f}MB | {compression:.1f}x nén")
                 
                 self.stats["pending"] = max(0, self.stats.get("pending", 1) - 1)
                 self.stats["success"] = self.stats.get("success", 0) + 1
