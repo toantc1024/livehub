@@ -4,7 +4,7 @@ SQLAlchemy Image model.
 
 from datetime import datetime
 from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import String, DateTime, Enum, Text, JSON, ForeignKey, Index
+from sqlalchemy import String, DateTime, Enum, Text, JSON, ForeignKey, Index, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -32,6 +32,9 @@ class Image(Base):
         default=ImageStatus.PROCESSING
     )
     imageData: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    
+    viewCount: Mapped[int] = mapped_column(Integer, default=0)
+    downloadCount: Mapped[int] = mapped_column(Integer, default=0)
     
     createdAt: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

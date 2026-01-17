@@ -37,6 +37,8 @@ class ImageResponse(ImageBase):
     storagePath: Optional[str] = None
     status: ImageStatus
     imageData: Optional[dict] = None
+    viewCount: int = 0
+    downloadCount: int = 0
     createdAt: datetime
     updatedAt: datetime
     

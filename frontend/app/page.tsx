@@ -17,34 +17,6 @@ import { ImageGrid, ImageItem } from "@/components/gallery/image-grid";
 
 const ease = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
-// Example event images
-const exampleImages = [
-  {
-    src: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&h=300&fit=crop",
-    alt: "Hội thảo công nghệ",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=400&h=300&fit=crop",
-    alt: "Lễ tốt nghiệp",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1511578314322-379afb476865?w=400&h=300&fit=crop",
-    alt: "Sự kiện thể thao",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=400&h=300&fit=crop",
-    alt: "Hội nghị sinh viên",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&h=300&fit=crop",
-    alt: "Lễ hội văn hóa",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=400&h=300&fit=crop",
-    alt: "Workshop sáng tạo",
-  },
-];
-
 const features = [
   {
     icon: Camera,
@@ -68,21 +40,6 @@ export default function HomePage() {
   const [recentImages, setRecentImages] = useState<ImageItem[]>([]);
   const [isLoadingImages, setIsLoadingImages] = useState(true);
 
-  // Placeholder blur data
-  const BLUR_DATA_URL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAUH/8QAIhAAAQMDBAMAAAAAAAAAAAAAAQIDBAAFEQYSITEHE0H/xAAVAQEBAAAAAAAAAAAAAAAAAAADBf/EABkRAAIDAQAAAAAAAAAAAAAAAAECAAMRIf/aAAwDAQACEQMRAD8AqeM9Y3e43q8RLncJE2LBWGo6HlFQYSpIUck9kk/KKUrDLJkyJUd//9k=";
-
-  // Map example images
-  const exampleImageItems: ImageItem[] = exampleImages.map((img, i) => ({
-      id: `example-${i}`,
-      filename: img.alt,
-      originalUrl: img.src,
-      status: "active",
-      createdAt: new Date().toISOString(),
-      imageData: {
-        blurDataURL: BLUR_DATA_URL
-      },
-  }));
-
   useEffect(() => {
     async function fetchImages() {
       if (isAuthenticated) {
@@ -97,30 +54,17 @@ export default function HomePage() {
             setIsLoadingImages(false);
         }
       } else {
-        setIsLoadingImages(false); // No loading if not auth, just show examples immediately
+        setIsLoadingImages(false); 
         setRecentImages([]);
       }
     }
-    // Only fetch if authenticated to avoid 401 calls (though 401 is handled)
     fetchImages();
   }, [isAuthenticated]);
-
-  // If authenticated and have images, use them. Otherwise fallback to examples.
-  // Actually, if authenticated but no images, we might want to show empty state or examples?
-  // Let's show examples if no real images found to keep the page looking good?
-  // User asked: "The same for những khoản khắc đáng nhớ in main page".
-  // If user has no images, maybe show examples? But "force login" implies seeing REAL content.
-  // If logged in and empty -> existing behavior in gallery is empty state.
-  // But for Homepage (Landing), empty state looks bad.
-  // Let's stick to logic: Auth & Have Images -> Show Real. Else -> Show Examples.
   
-  const displayImages = (isAuthenticated && recentImages.length > 0) ? recentImages : exampleImageItems;
-  const isUsingRealImages = isAuthenticated && recentImages.length > 0;
+  const displayImages = recentImages;
   
-  // If not using real images (meaning either not auth OR auth but empty), should we force login?
-  // Request says: "if user not logged in, force user to login".
-  // So if !isAuthenticated -> force login on click.
-  const handleImageClick = !isAuthenticated ? () => login() : undefined;
+  // If not authenticated (or authenticated but no images), we show empty state.
+  const handleImageClick = undefined;
 
   return (
     <div className="min-h-screen relative flex flex-col overflow-hidden">
