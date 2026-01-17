@@ -349,6 +349,73 @@ export function ImageGrid({
         .skeleton-shimmer {
           animation: shimmer 1.5s infinite;
         }
+        
+        /* Lightbox Navigation Buttons - Circle Style */
+        .PhotoView-Slider__ArrowLeft,
+        .PhotoView-Slider__ArrowRight {
+          width: 48px !important;
+          height: 48px !important;
+          border-radius: 50% !important;
+          background: rgba(255, 255, 255, 0.15) !important;
+          backdrop-filter: blur(12px) !important;
+          -webkit-backdrop-filter: blur(12px) !important;
+          border: 1px solid rgba(255, 255, 255, 0.2) !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          transition: all 0.2s ease !important;
+          opacity: 0.8 !important;
+        }
+        
+        .PhotoView-Slider__ArrowLeft:hover,
+        .PhotoView-Slider__ArrowRight:hover {
+          background: rgba(255, 255, 255, 0.25) !important;
+          opacity: 1 !important;
+          transform: scale(1.1) !important;
+        }
+        
+        .PhotoView-Slider__ArrowLeft:active,
+        .PhotoView-Slider__ArrowRight:active {
+          transform: scale(0.95) !important;
+        }
+        
+        .PhotoView-Slider__ArrowLeft svg,
+        .PhotoView-Slider__ArrowRight svg {
+          width: 24px !important;
+          height: 24px !important;
+          color: white !important;
+        }
+        
+        /* Position adjustments */
+        .PhotoView-Slider__ArrowLeft {
+          left: 16px !important;
+        }
+        
+        .PhotoView-Slider__ArrowRight {
+          right: 16px !important;
+        }
+        
+        /* Toolbar styling */
+        .PhotoView-Slider__toolbarIcon {
+          width: 40px !important;
+          height: 40px !important;
+          border-radius: 50% !important;
+          background: rgba(255, 255, 255, 0.1) !important;
+          backdrop-filter: blur(8px) !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          transition: all 0.2s ease !important;
+        }
+        
+        .PhotoView-Slider__toolbarIcon:hover {
+          background: rgba(255, 255, 255, 0.2) !important;
+        }
+        
+        /* Close button */
+        .PhotoView-Slider__BannerWrap {
+          background: transparent !important;
+        }
       `}</style>
     </>
   );
