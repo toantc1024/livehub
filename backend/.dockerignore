@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files (use docker-compose env instead)
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+
+# Docker (avoid infinite loops)
+Dockerfile*
+docker-compose*
+.docker/
+
+# Tests and dev files
+tests/
+test_*.py
+*_test.py
+conftest.py
+pytest.ini
+.coveragerc
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Utility scripts (not needed in production)
+backfill_all.py
+check_db_faces.py
+check_qdrant.py
+test_match.py
+update_similarity.py
+start_services.bat
+
+# Alembic versions are needed for migrations
+# !alembic/
+
+# Logs
+*.log
+logs/

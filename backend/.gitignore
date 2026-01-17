@@ -1,0 +1,70 @@
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+.env.switch
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+.venv/
+ENV/
+env/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+.hypothesis/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite3
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.bak
+
+# DeepFace models (downloaded at runtime/build)
+.deepface/
+
+# Utility scripts (dev only)
+check_*.py
+test_*.py
+backfill_all.py
+update_similarity.py

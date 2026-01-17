@@ -1,0 +1,152 @@
+# Docker Compose for Production
+# Full stack with all services
+# Usage: docker compose -f docker-compose.prod.yml up -d
+
+version: '3.8'
+
+services:
+  # PostgreSQL
+  livehub-db:
+    image: postgres:16-alpine
+    container_name: livehub-db
+    restart: always
+    ports:
+      - "${LIVEHUB_DB_PORT:-5433}:5432"
+    environment:
+      - POSTGRES_USER=${LIVEHUB_DB_USER:-livehub}
+      - POSTGRES_PASSWORD=${LIVEHUB_DB_PASSWORD:-livehub123}
+      - POSTGRES_DB=${LIVEHUB_DB_NAME:-livehub}
+    volumes:
+      - livehub-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LIVEHUB_DB_USER:-livehub} -d ${LIVEHUB_DB_NAME:-livehub}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: always
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
+  # LiveHub FastAPI Backend
+  livehub-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: livehub-api
+    restart: always
+    ports:
+      - "${LIVEHUB_API_PORT:-8080}:8080"
+    environment:
+      - DATABASE_URL=postgresql://${LIVEHUB_DB_USER:-livehub}:${LIVEHUB_DB_PASSWORD:-livehub123}@livehub-db:5432/${LIVEHUB_DB_NAME:-livehub}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
+      - BACKEND_URL=${BACKEND_URL:-http://localhost:8080}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - ADMIN_EMAILS=${ADMIN_EMAILS:-[]}
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_COLLECTION=faces
+      - QDRANT_USER_COLLECTION=user_references
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MINIO_BUCKET=livehub
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SIMILARITY_THRESHOLD=0.6
+      - CORS_ORIGINS=["http://localhost:3000"]
+    depends_on:
+      livehub-db:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      minio:
+        condition: service_started
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: always
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: always
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+
+  # LiveHub Background Worker (processes images)
+  livehub-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: livehub-worker
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://${LIVEHUB_DB_USER:-livehub}:${LIVEHUB_DB_PASSWORD:-livehub123}@livehub-db:5432/${LIVEHUB_DB_NAME:-livehub}
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_COLLECTION=faces
+      - QDRANT_USER_COLLECTION=user_references
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MINIO_BUCKET=livehub
+      - SIMILARITY_THRESHOLD=0.6
+    command: python worker.py
+    depends_on:
+      livehub-db:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      minio:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+volumes:
+  minio_data:
+  livehub-db-data:
+  qdrant_data:
+  redis_data:
