@@ -127,6 +127,31 @@ export const api = {
     return res.json();
   },
 
+  // ==================
+  // Public APIs (No Auth Required)
+  // ==================
+
+  /**
+   * Get public recent images - NO AUTH REQUIRED.
+   * Used for homepage when user is not logged in.
+   */
+  async getPublicRecentImages(page = 1, pageSize = 20): Promise<any> {
+    const res = await fetch(
+      apiUrl(`/images/public/recent?page=${page}&page_size=${pageSize}`)
+    );
+    if (!res.ok) throw new Error("Failed to fetch public images");
+    return res.json();
+  },
+
+  /**
+   * Get public image details - NO AUTH REQUIRED.
+   */
+  async getPublicImage(imageId: string): Promise<any> {
+    const res = await fetch(apiUrl(`/images/public/${imageId}`));
+    if (!res.ok) throw new Error("Failed to fetch image");
+    return res.json();
+  },
+
   /**
    * Register face.
    */

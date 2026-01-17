@@ -42,24 +42,26 @@ export default function HomePage() {
 
   useEffect(() => {
     async function fetchImages() {
-      if (isAuthenticated) {
-        try {
-          setIsLoadingImages(true);
-          const res = await api.getRecentImages(1, 6);
-          setRecentImages(res.items || []);
-        } catch (error) {
-          console.error(error);
-          setRecentImages([]);
-        } finally {
-            setIsLoadingImages(false);
-        }
-      } else {
-        setIsLoadingImages(false); 
+      try {
+        setIsLoadingImages(true);
+        // Use different API based on auth status
+        const res = isAuthenticated
+          ? await api.getRecentImages(1, 6)
+          : await api.getPublicRecentImages(1, 6);
+        setRecentImages(res.items || []);
+      } catch (error) {
+        console.error(error);
         setRecentImages([]);
+      } finally {
+        setIsLoadingImages(false);
       }
     }
-    fetchImages();
-  }, [isAuthenticated]);
+    
+    // Only fetch after auth loading is complete
+    if (!isLoading) {
+      fetchImages();
+    }
+  }, [isAuthenticated, isLoading]);
   
   const displayImages = recentImages;
   
@@ -216,18 +218,20 @@ export default function HomePage() {
                   </Button>
                 </Link>
             ) : (
-                <Button variant="ghost" onClick={login} className="rounded-full group flex-shrink-0">
-                  <span className="hidden sm:inline">Xem tất cả</span>
-                  <span className="sm:hidden">Xem</span>
-                  <ArrowRight className="ml-1 sm:ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                </Button>
+                <Link href="/browse">
+                  <Button variant="ghost" className="rounded-full group flex-shrink-0">
+                    <span className="hidden sm:inline">Xem tất cả</span>
+                    <span className="sm:hidden">Xem</span>
+                    <ArrowRight className="ml-1 sm:ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                </Link>
             )}
           </div>
           
            <div className="max-w-5xl mx-auto px-2">
              <ImageGrid
                  images={displayImages}
-                 isLoading={isAuthenticated && isLoadingImages}
+                 isLoading={isLoadingImages}
                  hasMore={false}
                  gridClassName="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4"
                  onImageClick={handleImageClick}
