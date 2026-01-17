@@ -120,6 +120,11 @@ services:
     restart: always
     environment:
       - DATABASE_URL=postgresql://${LIVEHUB_DB_USER:-livehub}:${LIVEHUB_DB_PASSWORD:-livehub123}@livehub-db:5432/${LIVEHUB_DB_NAME:-livehub}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
+      - BACKEND_URL=${BACKEND_URL:-https://api-livehub.yhcmute.com}
+      - FRONTEND_URL=${FRONTEND_URL:-https://livehub.yhcmute.com}
       - QDRANT_URL=http://qdrant:6333
       - QDRANT_COLLECTION=faces
       - QDRANT_USER_COLLECTION=user_references
@@ -127,6 +132,8 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - MINIO_BUCKET=livehub
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - SIMILARITY_THRESHOLD=0.6
     command: python worker.py
     depends_on:
