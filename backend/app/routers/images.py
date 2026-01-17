@@ -150,10 +150,46 @@ async def get_recent_images(
     page_size: int = Query(6, ge=1, le=20),
 ):
     """
-    Get recent images from entire system.
+    Get recent images from entire system (authenticated).
     
     Used for "Những khoảnh khắc đáng nhớ" section on gallery homepage.
     Only returns READY images.
+    """
+    # Query all READY images, newest first
+    query = select(Image).where(Image.status == ImageStatus.READY)
+    
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+    
+    # Paginate
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    query = query.order_by(Image.createdAt.desc())
+    
+    result = await db.execute(query)
+    images = result.scalars().all()
+    
+    return ImageListResponse(
+        items=[ImageResponse.model_validate(img) for img in images],
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=(total + page_size - 1) // page_size if total > 0 else 0,
+    )
+
+
+@router.get("/public/recent", response_model=ImageListResponse)
+async def get_recent_images_public(
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(6, ge=1, le=20),
+):
+    """
+    Get recent images from entire system (public, no authentication required).
+    
+    Used for "Những khoảnh khắc đáng nhớ" section on homepage for non-authenticated users.
+    Only returns READY images. Face recognition features require authentication.
     """
     # Query all READY images, newest first
     query = select(Image).where(Image.status == ImageStatus.READY)
