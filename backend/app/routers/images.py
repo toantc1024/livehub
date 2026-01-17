@@ -142,17 +142,13 @@ async def list_images(
     )
 
 
-@router.get("/recent", response_model=ImageListResponse)
-async def get_recent_images(
-    user: CurrentUser,
-    db: AsyncSession = Depends(get_db),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(6, ge=1, le=20),
-):
+async def _get_recent_images_impl(
+    db: AsyncSession,
+    page: int,
+    page_size: int,
+) -> ImageListResponse:
     """
-    Get recent images from entire system (authenticated).
-    
-    Used for "Những khoảnh khắc đáng nhớ" section on gallery homepage.
+    Internal helper to get recent images from entire system.
     Only returns READY images.
     """
     # Query all READY images, newest first
@@ -179,6 +175,22 @@ async def get_recent_images(
     )
 
 
+@router.get("/recent", response_model=ImageListResponse)
+async def get_recent_images(
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(6, ge=1, le=20),
+):
+    """
+    Get recent images from entire system (authenticated).
+    
+    Used for "Những khoảnh khắc đáng nhớ" section on gallery homepage.
+    Only returns READY images.
+    """
+    return await _get_recent_images_impl(db, page, page_size)
+
+
 @router.get("/public/recent", response_model=ImageListResponse)
 async def get_recent_images_public(
     db: AsyncSession = Depends(get_db),
@@ -191,28 +203,7 @@ async def get_recent_images_public(
     Used for "Những khoảnh khắc đáng nhớ" section on homepage for non-authenticated users.
     Only returns READY images. Face recognition features require authentication.
     """
-    # Query all READY images, newest first
-    query = select(Image).where(Image.status == ImageStatus.READY)
-    
-    # Count total
-    count_query = select(func.count()).select_from(query.subquery())
-    total_result = await db.execute(count_query)
-    total = total_result.scalar() or 0
-    
-    # Paginate
-    query = query.offset((page - 1) * page_size).limit(page_size)
-    query = query.order_by(Image.createdAt.desc())
-    
-    result = await db.execute(query)
-    images = result.scalars().all()
-    
-    return ImageListResponse(
-        items=[ImageResponse.model_validate(img) for img in images],
-        total=total,
-        page=page,
-        page_size=page_size,
-        pages=(total + page_size - 1) // page_size if total > 0 else 0,
-    )
+    return await _get_recent_images_impl(db, page, page_size)
 
 
 @router.get("/my-faces", response_model=ImageListResponse)
