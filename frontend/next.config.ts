@@ -2,16 +2,30 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
-    domains: [
-      "images.unsplash.com",
-      "livehub.yhcmute.com",
-      "lh3.googleusercontent.com",
-    ],
     remotePatterns: [
+      // Unsplash images
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+      },
+
+      // Production image domain
+      {
+        protocol: "https",
+        hostname: "livehub.yhcmute.com",
+      },
+
+      // Google user profile images
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+      },
+
+      // Local development backend
       {
         protocol: "http",
         hostname: "localhost",
-        port: "8080", // 👈 MUST MATCH YOUR URL
+        port: "8080",
         pathname: "/**",
       },
     ],
