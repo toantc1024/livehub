@@ -68,6 +68,7 @@ export default function EmbedGalleryPage() {
     }
     if (!isLoading && isAuthenticated && needsProfileSetup) {
       router.replace("/gallery/register-face");
+      return;
     }
   }, [isLoading, isAuthenticated, needsProfileSetup, router]);
 

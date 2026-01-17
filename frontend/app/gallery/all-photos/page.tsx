@@ -75,6 +75,7 @@ export default function AllPhotosPage() {
     }
     if (!isLoading && isAuthenticated && needsProfileSetup) {
       router.replace("/gallery/register-face");
+      return;
     }
   }, [isLoading, isAuthenticated, needsProfileSetup, router]);
 
