@@ -128,6 +128,18 @@ export const api = {
   },
 
   /**
+   * Get recent images (public, no auth required).
+   * Used for embed gallery page.
+   */
+  async getPublicRecentImages(page = 1, pageSize = 6): Promise<any> {
+    const res = await fetch(
+      apiUrl(`/images/public/recent?page=${page}&page_size=${pageSize}`)
+    );
+    if (!res.ok) throw new Error("Failed to fetch recent images");
+    return res.json();
+  },
+
+  /**
    * Register face.
    */
   async registerFace(file: File): Promise<any> {

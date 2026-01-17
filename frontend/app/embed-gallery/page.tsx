@@ -34,7 +34,7 @@ export default function EmbedGalleryPage() {
       }
       
       try {
-        const res: ImageListResponse = await api.getRecentImages(pageNum, 12);
+        const res: ImageListResponse = await api.getPublicRecentImages(pageNum, 12);
         
         if (append && pageNum > 1) {
           setImages(prev => [...prev, ...res.items]);
