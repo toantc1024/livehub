@@ -369,7 +369,3 @@
 .PhotoView-Slider__ArrowRight {
   @apply w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm transition-colors;
 }
-
-.PhotoView-Slider__BannerWrap {
-  @apply bg-black/50 backdrop-blur-sm;
-}

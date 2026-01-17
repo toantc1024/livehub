@@ -479,6 +479,8 @@ export function ImageGrid({
           width: 40px !important;
           height: 40px !important;
           border-radius: 50% !important;
+          background: rgba(255, 255, 255, 0.1) !important;
+          backdrop-filter: blur(8px) !important;
           display: flex !important;
           align-items: center !important;
           justify-content: center !important;
