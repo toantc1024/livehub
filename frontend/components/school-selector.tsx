@@ -4,10 +4,10 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Search, School, MapPin, Check, X, ChevronDown } from "lucide-react";
@@ -20,6 +20,7 @@ interface SchoolOption {
 
 // Danh sách trường học đầy đủ
 const SCHOOLS: SchoolOption[] = [
+  { name: "Trường Đại học Công nghệ Kỹ thuật", province: "TP. HỒ CHÍ MINH" },
   { name: "THPT MAI THANH THẾ", province: "TP. CẦN THƠ" },
   { name: "THPT TRẤN BIÊN", province: "TỈNH ĐỒNG NAI" },
   { name: "THPT NGUYỄN TRÃI", province: "TỈNH ĐỒNG NAI" },
@@ -165,14 +166,16 @@ const SCHOOLS: SchoolOption[] = [
 ];
 
 // Lấy danh sách provinces unique
-const PROVINCES = Array.from(new Set(SCHOOLS.map(s => s.province))).sort((a, b) => {
-  // Ưu tiên "TP. HỒ CHÍ MINH" lên đầu
-  if (a === "TP. HỒ CHÍ MINH") return -1;
-  if (b === "TP. HỒ CHÍ MINH") return 1;
-  if (a === "KHÁC") return 1;
-  if (b === "KHÁC") return -1;
-  return a.localeCompare(b, 'vi');
-});
+const PROVINCES = Array.from(new Set(SCHOOLS.map((s) => s.province))).sort(
+  (a, b) => {
+    // Ưu tiên "TP. HỒ CHÍ MINH" lên đầu
+    if (a === "TP. HỒ CHÍ MINH") return -1;
+    if (b === "TP. HỒ CHÍ MINH") return 1;
+    if (a === "KHÁC") return 1;
+    if (b === "KHÁC") return -1;
+    return a.localeCompare(b, "vi");
+  },
+);
 
 interface SchoolSelectorProps {
   value: string;
@@ -189,30 +192,30 @@ export function SchoolSelector({
 }: SchoolSelectorProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [selectedProvince, setSelectedProvince] = React.useState<string | null>(null);
-  
+  const [selectedProvince, setSelectedProvince] = React.useState<string | null>(
+    null,
+  );
+
   // Get display label for current value
   const selectedSchool = React.useMemo(() => {
-    return SCHOOLS.find(s => s.name === value);
+    return SCHOOLS.find((s) => s.name === value);
   }, [value]);
-  
+
   // Filter schools based on search and province
   const filteredSchools = React.useMemo(() => {
     let filtered = SCHOOLS;
-    
+
     // Filter by province
     if (selectedProvince) {
-      filtered = filtered.filter(s => s.province === selectedProvince);
+      filtered = filtered.filter((s) => s.province === selectedProvince);
     }
-    
+
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(s => 
-        s.name.toLowerCase().includes(query)
-      );
+      filtered = filtered.filter((s) => s.name.toLowerCase().includes(query));
     }
-    
+
     return filtered;
   }, [searchQuery, selectedProvince]);
 
@@ -238,7 +241,7 @@ export function SchoolSelector({
         className={cn(
           "w-full justify-between rounded-xl h-11 font-normal",
           !value && "text-muted-foreground",
-          className
+          className,
         )}
         onClick={() => setOpen(true)}
       >
@@ -300,16 +303,20 @@ export function SchoolSelector({
                 {PROVINCES.map((province) => (
                   <Badge
                     key={province}
-                    variant={selectedProvince === province ? "default" : "outline"}
+                    variant={
+                      selectedProvince === province ? "default" : "outline"
+                    }
                     className={cn(
                       "cursor-pointer transition-all text-xs py-1.5 px-3 whitespace-nowrap flex-shrink-0",
-                      selectedProvince === province 
-                        ? "bg-primary text-primary-foreground" 
-                        : "hover:bg-muted"
+                      selectedProvince === province
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-muted",
                     )}
-                    onClick={() => setSelectedProvince(
-                      selectedProvince === province ? null : province
-                    )}
+                    onClick={() =>
+                      setSelectedProvince(
+                        selectedProvince === province ? null : province,
+                      )
+                    }
                   >
                     {province.replace("TỈNH ", "").replace("TP. ", "")}
                   </Badge>
@@ -324,7 +331,9 @@ export function SchoolSelector({
               {filteredSchools.length === 0 ? (
                 <div className="py-12 text-center">
                   <School className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
-                  <p className="text-muted-foreground">Không tìm thấy trường học</p>
+                  <p className="text-muted-foreground">
+                    Không tìm thấy trường học
+                  </p>
                   <Button
                     variant="link"
                     size="sm"
@@ -342,16 +351,18 @@ export function SchoolSelector({
                       onClick={() => handleSelect(school.name)}
                       className={cn(
                         "w-full flex items-center gap-3 px-3 sm:px-4 py-3 rounded-xl text-left transition-colors active:bg-muted/80",
-                        value === school.name 
-                          ? "bg-primary/10 text-primary" 
-                          : "hover:bg-muted"
+                        value === school.name
+                          ? "bg-primary/10 text-primary"
+                          : "hover:bg-muted",
                       )}
                     >
                       <div className="flex-1 min-w-0">
-                        <p className={cn(
-                          "font-medium text-sm sm:text-base",
-                          value === school.name && "text-primary"
-                        )}>
+                        <p
+                          className={cn(
+                            "font-medium text-sm sm:text-base",
+                            value === school.name && "text-primary",
+                          )}
+                        >
                           {school.name}
                         </p>
                         <p className="text-xs text-muted-foreground">
