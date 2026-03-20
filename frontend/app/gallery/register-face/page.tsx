@@ -174,29 +174,75 @@ export default function RegisterFacePage() {
     }
   }, [user]);
 
-  // Real-time face detection using browser FaceDetector API (Chrome/Edge)
+  // Real-time face detection using MediaPipe (cross-browser) with browser FaceDetector fallback
   useEffect(() => {
     if (!isCapturing) {
       setFaceQuality('none');
       setCountdown(0);
+      setQualityScore(0);
       return;
     }
 
     let active = true;
-    let detector: any = null;
+    let mpDetector: any = null;
+    let browserDetector: any = null;
+    let detectorType: 'mediapipe' | 'browser' | null = null;
     let goodFrameCount = 0;
     let countdownTimer: ReturnType<typeof setInterval> | null = null;
     let currentCountdown = 0;
+    let lastTimestamp = -1;
 
     const initDetector = async () => {
+      // Try MediaPipe first (works in all browsers)
+      try {
+        const { FaceDetector, FilesetResolver } = await import('@mediapipe/tasks-vision');
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+        );
+        mpDetector = await FaceDetector.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
+          },
+          runningMode: "VIDEO",
+        });
+        detectorType = 'mediapipe';
+        setHasFaceDetector(true);
+        return;
+      } catch (e) {
+        console.warn("MediaPipe init failed, trying browser FaceDetector:", e);
+      }
+
+      // Fallback: browser FaceDetector API (Chrome/Edge)
       if (typeof window !== 'undefined' && 'FaceDetector' in window) {
         try {
-          detector = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 5 });
+          browserDetector = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 5 });
+          detectorType = 'browser';
           setHasFaceDetector(true);
         } catch {
           setHasFaceDetector(false);
         }
       }
+    };
+
+    const detectFaces = async (video: HTMLVideoElement): Promise<Array<{ x: number; y: number; width: number; height: number }>> => {
+      if (detectorType === 'mediapipe' && mpDetector) {
+        const now = performance.now();
+        if (now === lastTimestamp) return [];
+        lastTimestamp = now;
+        const result = mpDetector.detectForVideo(video, now);
+        return (result.detections || []).map((d: any) => {
+          const bb = d.boundingBox;
+          return { x: bb.originX, y: bb.originY, width: bb.width, height: bb.height };
+        });
+      }
+      if (detectorType === 'browser' && browserDetector) {
+        const faces = await browserDetector.detect(video);
+        return faces.map((f: any) => {
+          const bb = f.boundingBox;
+          return { x: bb.x, y: bb.y, width: bb.width, height: bb.height };
+        });
+      }
+      return [];
     };
 
     const runDetection = async () => {
@@ -206,7 +252,7 @@ export default function RegisterFacePage() {
       const canvas = canvasRef.current;
 
       if (!video || !canvas || video.readyState < 2) {
-        if (active) setTimeout(runDetection, 200);
+        if (active) requestAnimationFrame(() => setTimeout(runDetection, 100));
         return;
       }
 
@@ -214,15 +260,15 @@ export default function RegisterFacePage() {
       if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
 
       const ctx = canvas.getContext('2d');
-      if (!ctx) { if (active) setTimeout(runDetection, 200); return; }
+      if (!ctx) { if (active) setTimeout(runDetection, 100); return; }
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (detector) {
+      if (detectorType) {
         try {
-          const faces = await detector.detect(video);
+          const faces = await detectFaces(video);
 
           if (faces.length === 1) {
-            const bb = faces[0].boundingBox;
+            const bb = faces[0];
             const faceRatio = (bb.width * bb.height) / (canvas.width * canvas.height);
             const cx = bb.x + bb.width / 2;
             const cy = bb.y + bb.height / 2;
@@ -244,16 +290,33 @@ export default function RegisterFacePage() {
             // Save bbox for cropping later
             lastBboxRef.current = { x: bb.x, y: bb.y, w: bb.width, h: bb.height };
 
-            // Draw bounding box
+            // Draw bounding box with rounded corners
             ctx.strokeStyle = quality === 'good' ? '#22c55e' : '#eab308';
-            ctx.lineWidth = Math.max(2, canvas.width * 0.004);
-            ctx.strokeRect(bb.x, bb.y, bb.width, bb.height);
+            ctx.lineWidth = Math.max(2, canvas.width * 0.005);
+            ctx.beginPath();
+            const r = Math.min(bb.width, bb.height) * 0.08;
+            ctx.roundRect(bb.x, bb.y, bb.width, bb.height, r);
+            ctx.stroke();
+
+            // Draw corner markers for visual feedback
+            const cornerLen = Math.min(bb.width, bb.height) * 0.15;
+            ctx.lineWidth = Math.max(3, canvas.width * 0.007);
+            const drawCorner = (cx: number, cy: number, dx: number, dy: number) => {
+              ctx.beginPath();
+              ctx.moveTo(cx + dx * cornerLen, cy);
+              ctx.lineTo(cx, cy);
+              ctx.lineTo(cx, cy + dy * cornerLen);
+              ctx.stroke();
+            };
+            drawCorner(bb.x, bb.y, 1, 1);
+            drawCorner(bb.x + bb.width, bb.y, -1, 1);
+            drawCorner(bb.x, bb.y + bb.height, 1, -1);
+            drawCorner(bb.x + bb.width, bb.y + bb.height, -1, -1);
 
             setFaceQuality(quality);
 
             if (quality === 'good') {
               goodFrameCount++;
-              // Start countdown after ~0.5s of consistent good quality (~5 frames at ~10fps)
               if (goodFrameCount >= 5 && !countdownTimer) {
                 currentCountdown = 3;
                 setCountdown(3);
@@ -269,10 +332,9 @@ export default function RegisterFacePage() {
                     if (active && webcamRef.current) {
                       const src = webcamRef.current.getScreenshot();
                       if (src) {
-                        // Extract cropped face from the screenshot
                         const cropFace = (imgSrc: string) => {
                           const bbox = lastBboxRef.current;
-                          if (!bbox || !video) return;
+                          if (!bbox) return;
                           const img = new Image();
                           img.onload = () => {
                             const pad = Math.max(bbox.w, bbox.h) * 0.3;
@@ -324,10 +386,8 @@ export default function RegisterFacePage() {
               currentCountdown = 0;
               setCountdown(0);
             }
-            // Draw all faces in red if multiple
             if (faces.length > 1) {
-              faces.forEach((f: any) => {
-                const bb = f.boundingBox;
+              faces.forEach((bb) => {
                 ctx.strokeStyle = '#ef4444';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(bb.x, bb.y, bb.width, bb.height);
@@ -339,7 +399,7 @@ export default function RegisterFacePage() {
         }
       }
 
-      if (active) setTimeout(runDetection, 100); // ~10 FPS
+      if (active) setTimeout(runDetection, 80); // ~12 FPS
     };
 
     initDetector().then(() => {
@@ -349,8 +409,43 @@ export default function RegisterFacePage() {
     return () => {
       active = false;
       if (countdownTimer) clearInterval(countdownTimer);
+      if (mpDetector) { try { mpDetector.close(); } catch {} }
     };
   }, [isCapturing]);
+
+  // Compress image to max dimension for faster upload
+  const compressImage = useCallback((file: File, maxSize = 1024): Promise<File> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width <= maxSize && height <= maxSize) {
+          URL.revokeObjectURL(img.src);
+          resolve(file);
+          return;
+        }
+        const ratio = Math.min(maxSize / width, maxSize / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+        const c = document.createElement('canvas');
+        c.width = width;
+        c.height = height;
+        const ctx = c.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          c.toBlob((blob) => {
+            URL.revokeObjectURL(img.src);
+            resolve(blob ? new File([blob], file.name, { type: 'image/jpeg' }) : file);
+          }, 'image/jpeg', 0.85);
+        } else {
+          URL.revokeObjectURL(img.src);
+          resolve(file);
+        }
+      };
+      img.onerror = () => { URL.revokeObjectURL(img.src); resolve(file); };
+      img.src = URL.createObjectURL(file);
+    });
+  }, []);
 
   const videoConstraints = {
     width: { ideal: 1280 },
@@ -460,7 +555,8 @@ export default function RegisterFacePage() {
 
     setIsSubmitting(true);
     try {
-      await api.registerFace(selectedFile);
+      const compressed = await compressImage(selectedFile);
+      await api.registerFace(compressed);
       toast.success("Cập nhật khuôn mặt thành công!");
       router.push("/gallery");
     } catch (error: any) {
@@ -501,7 +597,8 @@ export default function RegisterFacePage() {
 
     setIsSubmitting(true);
     try {
-      await api.registerFace(selectedFile);
+      const compressed = await compressImage(selectedFile);
+      await api.registerFace(compressed);
       toast.success("Cập nhật khuôn mặt thành công!");
       clearFile();
     } catch (error: any) {
