@@ -66,21 +66,6 @@ function ProfileFormComponent({ profileData, onProfileChange }: ProfileFormProps
         />
       </div>
 
-      {/* School */}
-      <div className="space-y-2">
-        <Label htmlFor="school" className="flex items-center gap-2">
-          <School className="h-4 w-4" />
-          Trường học <span className="text-destructive">*</span>
-        </Label>
-        <SchoolSelector
-          value={profileData.school}
-          onValueChange={(value) =>
-            onProfileChange({ ...profileData, school: value })
-          }
-          placeholder="Tìm và chọn trường học..."
-        />
-      </div>
-
       {/* Phone */}
       <div className="space-y-2">
         <Label htmlFor="phone" className="flex items-center gap-2">
@@ -391,10 +376,6 @@ export default function RegisterFacePage() {
       toast.error("Vui lòng nhập họ và tên");
       return false;
     }
-    if (!profileData.school) {
-      toast.error("Vui lòng chọn trường học");
-      return false;
-    }
     if (!profileData.phoneNumber.trim()) {
       toast.error("Vui lòng nhập số điện thoại");
       return false;
@@ -524,26 +505,6 @@ export default function RegisterFacePage() {
               className="absolute inset-0 w-full h-full pointer-events-none"
               style={{ transform: isMirrored ? 'scaleX(-1)' : undefined }}
             />
-            {/* Face guide oval overlay */}
-            <div className="absolute inset-0 pointer-events-none">
-              <svg viewBox="0 0 200 200" className="w-full h-full">
-                <defs>
-                  <mask id="face-guide-mask">
-                    <rect width="200" height="200" fill="white" />
-                    <ellipse cx="100" cy="90" rx="42" ry="56" fill="black" />
-                  </mask>
-                </defs>
-                <rect width="200" height="200" fill="rgba(0,0,0,0.3)" mask="url(#face-guide-mask)" />
-                <ellipse
-                  cx="100" cy="90" rx="42" ry="56"
-                  stroke={faceQuality === 'good' ? '#22c55e' : faceQuality === 'poor' ? '#eab308' : 'white'}
-                  strokeWidth={faceQuality === 'good' ? '1.5' : '0.8'}
-                  strokeDasharray={faceQuality === 'none' ? '4 3' : 'none'}
-                  fill="none"
-                  className="transition-all duration-300"
-                />
-              </svg>
-            </div>
             {/* Countdown overlay */}
             {countdown > 0 && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -572,10 +533,10 @@ export default function RegisterFacePage() {
                       ? `Chụp tự động sau ${countdown}s...`
                       : '✓ Khuôn mặt rõ ràng — giữ yên'
                     : faceQuality === 'poor'
-                      ? 'Đưa khuôn mặt vào giữa khung oval'
-                      : 'Đặt khuôn mặt vào khung hình'
+                      ? 'Khuôn mặt chưa đạt — căn chỉnh lại'
+                      : 'Đang tìm khuôn mặt...'
                 ) : (
-                  'Đặt khuôn mặt vào giữa khung oval'
+                  'Hướng mặt vào camera'
                 )}
               </div>
             </div>
