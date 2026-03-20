@@ -776,8 +776,8 @@ export default function RegisterFacePage() {
                     startCamera();
                   }}
                 >
-                  {user?.image ? (
-                    <img src={user.image} alt="Avatar" className="w-20 h-20 rounded-full object-cover border-2 border-muted" />
+                  {user?.avatarUrl ? (
+                    <img src={user.avatarUrl} alt="Avatar" className="w-20 h-20 rounded-full object-cover border-2 border-muted" />
                   ) : (
                     <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
                       <User className="h-10 w-10 text-primary" />
