@@ -186,7 +186,10 @@ export const api = {
       body: formData,
     });
 
-    if (!res.ok) throw new Error("Face registration failed");
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.detail || "Đăng ký khuôn mặt thất bại");
+    }
     return res.json();
   },
 

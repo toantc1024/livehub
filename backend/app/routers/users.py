@@ -139,7 +139,7 @@ async def register_user_face(
         if embedding is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="No face detected in image. Please upload a clear selfie.",
+                detail="Không phát hiện khuôn mặt trong ảnh. Vui lòng chụp lại rõ ràng hơn.",
             )
     
     except ValueError as e:

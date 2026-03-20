@@ -148,21 +148,53 @@ class FaceDetectionService:
         """
         Extract embedding for single-face use cases (user registration).
 
+        Validates:
+        - Exactly one face present
+        - Minimum confidence threshold (0.7)
+        - Minimum face size (2% of image area)
+
         Returns:
             512-d embedding or None
 
         Raises:
-            ValueError if multiple faces detected
+            ValueError if quality checks fail
         """
-        faces = self.detect_from_bytes(image_bytes)
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        if image is None:
+            raise ValueError("Invalid image bytes")
+
+        faces = self.detect_faces(image)
 
         if len(faces) == 0:
             return None
 
         if len(faces) > 1:
-            raise ValueError(f"Expected 1 face, found {len(faces)}")
+            raise ValueError(
+                f"Phát hiện {len(faces)} khuôn mặt. Vui lòng chụp ảnh chỉ có 1 khuôn mặt."
+            )
 
-        return faces[0].embedding
+        face = faces[0]
+
+        # Check confidence
+        if face.confidence < 0.7:
+            raise ValueError(
+                "Khuôn mặt không đủ rõ ràng. Vui lòng chụp lại với ánh sáng tốt hơn."
+            )
+
+        # Check face size relative to image
+        img_h, img_w = image.shape[:2]
+        img_area = img_w * img_h
+        face_area = face.bbox.width * face.bbox.height
+        face_ratio = face_area / img_area
+
+        if face_ratio < 0.02:
+            raise ValueError(
+                "Khuôn mặt quá nhỏ trong ảnh. Vui lòng đưa camera gần hơn."
+            )
+
+        return face.embedding
 
 
 # Singleton instance

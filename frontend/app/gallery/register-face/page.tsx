@@ -27,6 +27,7 @@ import {
   FlipHorizontal,
   SwitchCamera,
   Edit3,
+  ScanFace,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -130,6 +131,10 @@ export default function RegisterFacePage() {
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [isMirrored, setIsMirrored] = useState(true);
   const webcamRef = useRef<Webcam>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [faceQuality, setFaceQuality] = useState<'none' | 'poor' | 'good'>('none');
+  const [countdown, setCountdown] = useState(0);
+  const [hasFaceDetector, setHasFaceDetector] = useState(false);
 
   // Check face status on mount
   useEffect(() => {
@@ -181,9 +186,150 @@ export default function RegisterFacePage() {
     }
   }, [user]);
 
+  // Real-time face detection using browser FaceDetector API (Chrome/Edge)
+  useEffect(() => {
+    if (!isCapturing) {
+      setFaceQuality('none');
+      setCountdown(0);
+      return;
+    }
+
+    let active = true;
+    let detector: any = null;
+    let goodFrameCount = 0;
+    let countdownTimer: ReturnType<typeof setInterval> | null = null;
+    let currentCountdown = 0;
+
+    const initDetector = async () => {
+      if (typeof window !== 'undefined' && 'FaceDetector' in window) {
+        try {
+          detector = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 5 });
+          setHasFaceDetector(true);
+        } catch {
+          setHasFaceDetector(false);
+        }
+      }
+    };
+
+    const runDetection = async () => {
+      if (!active) return;
+
+      const video = webcamRef.current?.video;
+      const canvas = canvasRef.current;
+
+      if (!video || !canvas || video.readyState < 2) {
+        if (active) setTimeout(runDetection, 200);
+        return;
+      }
+
+      if (canvas.width !== video.videoWidth) canvas.width = video.videoWidth;
+      if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { if (active) setTimeout(runDetection, 200); return; }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (detector) {
+        try {
+          const faces = await detector.detect(video);
+
+          if (faces.length === 1) {
+            const bb = faces[0].boundingBox;
+            const faceRatio = (bb.width * bb.height) / (canvas.width * canvas.height);
+            const cx = bb.x + bb.width / 2;
+            const cy = bb.y + bb.height / 2;
+            const isCentered =
+              Math.abs(cx - canvas.width / 2) < canvas.width * 0.3 &&
+              Math.abs(cy - canvas.height / 2) < canvas.height * 0.3;
+            const isGoodSize = faceRatio > 0.03 && faceRatio < 0.8;
+            const quality = isCentered && isGoodSize ? 'good' : 'poor';
+
+            // Draw bounding box
+            ctx.strokeStyle = quality === 'good' ? '#22c55e' : '#eab308';
+            ctx.lineWidth = Math.max(2, canvas.width * 0.004);
+            ctx.strokeRect(bb.x, bb.y, bb.width, bb.height);
+
+            setFaceQuality(quality);
+
+            if (quality === 'good') {
+              goodFrameCount++;
+              // Start countdown after ~1.5s of consistent good quality (~10 frames at ~7fps)
+              if (goodFrameCount >= 10 && !countdownTimer) {
+                currentCountdown = 3;
+                setCountdown(3);
+                countdownTimer = setInterval(() => {
+                  currentCountdown--;
+                  if (currentCountdown > 0) {
+                    setCountdown(currentCountdown);
+                  } else {
+                    setCountdown(0);
+                    if (countdownTimer) clearInterval(countdownTimer);
+                    countdownTimer = null;
+                    // Auto-capture
+                    if (active && webcamRef.current) {
+                      const src = webcamRef.current.getScreenshot();
+                      if (src) {
+                        fetch(src).then(r => r.blob()).then(blob => {
+                          if (!active) return;
+                          const file = new File([blob], "selfie.jpg", { type: "image/jpeg" });
+                          setSelectedFile(file);
+                          setPreviewUrl(src);
+                          setIsCapturing(false);
+                        });
+                      }
+                    }
+                  }
+                }, 1000);
+              }
+            } else {
+              goodFrameCount = 0;
+              if (countdownTimer) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+                currentCountdown = 0;
+                setCountdown(0);
+              }
+            }
+          } else {
+            setFaceQuality(faces.length > 1 ? 'poor' : 'none');
+            goodFrameCount = 0;
+            if (countdownTimer) {
+              clearInterval(countdownTimer);
+              countdownTimer = null;
+              currentCountdown = 0;
+              setCountdown(0);
+            }
+            // Draw all faces in red if multiple
+            if (faces.length > 1) {
+              faces.forEach((f: any) => {
+                const bb = f.boundingBox;
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(bb.x, bb.y, bb.width, bb.height);
+              });
+            }
+          }
+        } catch {
+          // Detection failed silently
+        }
+      }
+
+      if (active) setTimeout(runDetection, 150); // ~7 FPS
+    };
+
+    initDetector().then(() => {
+      if (active) runDetection();
+    });
+
+    return () => {
+      active = false;
+      if (countdownTimer) clearInterval(countdownTimer);
+    };
+  }, [isCapturing]);
+
   const videoConstraints = {
-    width: 480,
-    height: 480,
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
     facingMode: facingMode,
   };
 
@@ -355,13 +501,14 @@ export default function RegisterFacePage() {
   const CameraSection = ({ showCurrentFaceMessage = false }: { showCurrentFaceMessage?: boolean }) => (
     <div className="space-y-4">
       {/* Camera/Preview Area */}
-      <div className="aspect-square relative rounded-2xl overflow-hidden bg-muted">
+      <div className="aspect-square relative rounded-2xl overflow-hidden bg-black">
         {isCapturing ? (
           <>
             <Webcam
               ref={webcamRef}
               audio={false}
               screenshotFormat="image/jpeg"
+              screenshotQuality={1}
               videoConstraints={videoConstraints}
               mirrored={isMirrored}
               className="w-full h-full object-cover"
@@ -371,20 +518,95 @@ export default function RegisterFacePage() {
                 setIsCapturing(false);
               }}
             />
+            {/* Face detection bounding box canvas */}
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full pointer-events-none"
+              style={{ transform: isMirrored ? 'scaleX(-1)' : undefined }}
+            />
+            {/* Face guide oval overlay */}
+            <div className="absolute inset-0 pointer-events-none">
+              <svg viewBox="0 0 200 200" className="w-full h-full">
+                <defs>
+                  <mask id="face-guide-mask">
+                    <rect width="200" height="200" fill="white" />
+                    <ellipse cx="100" cy="90" rx="42" ry="56" fill="black" />
+                  </mask>
+                </defs>
+                <rect width="200" height="200" fill="rgba(0,0,0,0.3)" mask="url(#face-guide-mask)" />
+                <ellipse
+                  cx="100" cy="90" rx="42" ry="56"
+                  stroke={faceQuality === 'good' ? '#22c55e' : faceQuality === 'poor' ? '#eab308' : 'white'}
+                  strokeWidth={faceQuality === 'good' ? '1.5' : '0.8'}
+                  strokeDasharray={faceQuality === 'none' ? '4 3' : 'none'}
+                  fill="none"
+                  className="transition-all duration-300"
+                />
+              </svg>
+            </div>
+            {/* Countdown overlay */}
+            {countdown > 0 && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <motion.div
+                  key={countdown}
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="w-20 h-20 rounded-full bg-black/60 flex items-center justify-center"
+                >
+                  <span className="text-4xl font-bold text-white">{countdown}</span>
+                </motion.div>
+              </div>
+            )}
+            {/* Quality status bar */}
+            <div className="absolute bottom-0 inset-x-0 p-3">
+              <div className={`rounded-full px-4 py-2 text-xs font-medium text-center backdrop-blur-sm ${
+                faceQuality === 'good'
+                  ? 'bg-green-500/80 text-white'
+                  : faceQuality === 'poor'
+                    ? 'bg-yellow-500/80 text-white'
+                    : 'bg-black/50 text-white/80'
+              }`}>
+                {hasFaceDetector ? (
+                  faceQuality === 'good'
+                    ? countdown > 0
+                      ? `Chụp tự động sau ${countdown}s...`
+                      : '✓ Khuôn mặt rõ ràng — giữ yên'
+                    : faceQuality === 'poor'
+                      ? 'Đưa khuôn mặt vào giữa khung oval'
+                      : 'Đặt khuôn mặt vào khung hình'
+                ) : (
+                  'Đặt khuôn mặt vào giữa khung oval'
+                )}
+              </div>
+            </div>
+            {/* Camera controls */}
             <div className="absolute top-3 right-3 flex gap-2">
               <button
                 onClick={toggleMirror}
-                className="p-2 rounded-full bg-black/50 text-white hover:bg-black/70"
+                className="p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
               >
                 <FlipHorizontal className="h-5 w-5" />
               </button>
               <button
                 onClick={toggleCamera}
-                className="p-2 rounded-full bg-black/50 text-white hover:bg-black/70"
+                className="p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
               >
                 <SwitchCamera className="h-5 w-5" />
               </button>
             </div>
+            {/* Face detection indicator */}
+            {hasFaceDetector && (
+              <div className="absolute top-3 left-3">
+                <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm ${
+                  faceQuality === 'good' ? 'bg-green-500/80 text-white' :
+                  faceQuality === 'poor' ? 'bg-yellow-500/80 text-white' :
+                  'bg-black/50 text-white/70'
+                }`}>
+                  <ScanFace className="h-3.5 w-3.5" />
+                  <span>{faceQuality === 'good' ? 'Phát hiện' : faceQuality === 'poor' ? 'Không rõ' : 'Tìm...'}</span>
+                </div>
+              </div>
+            )}
           </>
         ) : previewUrl ? (
           <>
@@ -399,9 +621,15 @@ export default function RegisterFacePage() {
             >
               <X className="h-5 w-5" />
             </button>
+            {/* Confirmation message */}
+            <div className="absolute bottom-0 inset-x-0 p-3">
+              <div className="rounded-full px-4 py-2 text-xs font-medium text-center bg-green-500/80 text-white backdrop-blur-sm">
+                ✓ Ảnh đã chụp — xác nhận bên dưới hoặc chụp lại
+              </div>
+            </div>
           </>
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground p-4">
+          <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground p-4 bg-muted">
             <Camera className="h-16 w-16 mb-4 opacity-50" />
             {showCurrentFaceMessage ? (
               <p className="text-sm text-center">Đã đăng ký khuôn mặt. Chụp ảnh mới để cập nhật.</p>
@@ -425,7 +653,7 @@ export default function RegisterFacePage() {
             </Button>
             <Button className="flex-1 rounded-full" onClick={capturePhoto}>
               <Camera className="h-4 w-4 mr-2" />
-              Chụp ảnh
+              Chụp ngay
             </Button>
           </>
         ) : (
@@ -473,6 +701,8 @@ export default function RegisterFacePage() {
               <li>• Ánh sáng đầy đủ, không ngược sáng</li>
               <li>• Nhìn thẳng vào camera</li>
               <li>• Không đeo kính râm hoặc che mặt</li>
+              <li>• Khuôn mặt chiếm phần lớn khung hình</li>
+              {hasFaceDetector && <li>• Hệ thống sẽ <strong>tự động chụp</strong> khi phát hiện khuôn mặt rõ ràng</li>}
             </ul>
           </div>
         </div>
