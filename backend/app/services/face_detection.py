@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 # Quality thresholds
 MIN_DETECTION_CONFIDENCE = 0.90   # RetinaFace confidence
 MIN_FACE_SIZE_PX = 50             # Minimum face width/height in pixels
-MIN_BLUR_SCORE = 50.0             # Laplacian variance (below = too blurry)
+MIN_BLUR_SCORE = 30.0             # Laplacian variance (below = too blurry)
 MIN_REGISTRATION_CONFIDENCE = 0.85
 MIN_REGISTRATION_FACE_RATIO = 0.04  # Face must be ≥4% of image area
 
