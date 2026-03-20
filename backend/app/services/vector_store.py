@@ -177,16 +177,29 @@ class VectorStoreService:
             score_threshold=threshold,
         )
         
-        return [
-            FaceSearchResult(
+        # Deduplicate: keep only the highest-similarity result per user
+        seen_users: dict[str, int] = {}  # user_id -> index in output
+        output: list[FaceSearchResult] = []
+
+        for hit in results.points:
+            uid = hit.payload.get("user_id")
+            entry = FaceSearchResult(
                 face_id=hit.payload["face_id"],
                 image_id=hit.payload["image_id"],
-                user_id=hit.payload.get("user_id"),
+                user_id=uid,
                 similarity=hit.score,
-                bbox=BoundingBox(x=0, y=0, width=0, height=0),  # Retrieved from DB
+                bbox=BoundingBox(x=0, y=0, width=0, height=0),
             )
-            for hit in results.points
-        ]
+            if uid and uid in seen_users:
+                idx = seen_users[uid]
+                if hit.score > output[idx].similarity:
+                    output[idx] = entry
+                continue
+            if uid:
+                seen_users[uid] = len(output)
+            output.append(entry)
+
+        return output
     
     async def search_user_references(
         self,

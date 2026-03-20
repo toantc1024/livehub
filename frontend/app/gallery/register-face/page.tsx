@@ -120,6 +120,9 @@ export default function RegisterFacePage() {
   const [faceQuality, setFaceQuality] = useState<'none' | 'poor' | 'good'>('none');
   const [countdown, setCountdown] = useState(0);
   const [hasFaceDetector, setHasFaceDetector] = useState(false);
+  const [croppedFaceUrl, setCroppedFaceUrl] = useState<string | null>(null);
+  const [qualityScore, setQualityScore] = useState(0); // 0-100
+  const lastBboxRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
   // Check face status on mount
   useEffect(() => {
@@ -229,6 +232,18 @@ export default function RegisterFacePage() {
             const isGoodSize = faceRatio > 0.03 && faceRatio < 0.8;
             const quality = isCentered && isGoodSize ? 'good' : 'poor';
 
+            // Calculate quality score 0-100
+            const centerScore = Math.max(0, 1 - Math.max(
+              Math.abs(cx - canvas.width / 2) / (canvas.width * 0.3),
+              Math.abs(cy - canvas.height / 2) / (canvas.height * 0.3)
+            ));
+            const sizeScore = faceRatio > 0.03 ? Math.min(1, faceRatio / 0.15) : 0;
+            const score = Math.round((centerScore * 0.5 + sizeScore * 0.5) * 100);
+            setQualityScore(score);
+
+            // Save bbox for cropping later
+            lastBboxRef.current = { x: bb.x, y: bb.y, w: bb.width, h: bb.height };
+
             // Draw bounding box
             ctx.strokeStyle = quality === 'good' ? '#22c55e' : '#eab308';
             ctx.lineWidth = Math.max(2, canvas.width * 0.004);
@@ -238,8 +253,8 @@ export default function RegisterFacePage() {
 
             if (quality === 'good') {
               goodFrameCount++;
-              // Start countdown after ~1.5s of consistent good quality (~10 frames at ~7fps)
-              if (goodFrameCount >= 10 && !countdownTimer) {
+              // Start countdown after ~0.5s of consistent good quality (~5 frames at ~10fps)
+              if (goodFrameCount >= 5 && !countdownTimer) {
                 currentCountdown = 3;
                 setCountdown(3);
                 countdownTimer = setInterval(() => {
@@ -250,16 +265,39 @@ export default function RegisterFacePage() {
                     setCountdown(0);
                     if (countdownTimer) clearInterval(countdownTimer);
                     countdownTimer = null;
-                    // Auto-capture
+                    // Auto-capture + crop face
                     if (active && webcamRef.current) {
                       const src = webcamRef.current.getScreenshot();
                       if (src) {
+                        // Extract cropped face from the screenshot
+                        const cropFace = (imgSrc: string) => {
+                          const bbox = lastBboxRef.current;
+                          if (!bbox || !video) return;
+                          const img = new Image();
+                          img.onload = () => {
+                            const pad = Math.max(bbox.w, bbox.h) * 0.3;
+                            const sx = Math.max(0, bbox.x - pad);
+                            const sy = Math.max(0, bbox.y - pad);
+                            const sw = Math.min(img.width - sx, bbox.w + pad * 2);
+                            const sh = Math.min(img.height - sy, bbox.h + pad * 2);
+                            const c = document.createElement('canvas');
+                            c.width = sw; c.height = sh;
+                            const cctx = c.getContext('2d');
+                            if (cctx) {
+                              cctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+                              setCroppedFaceUrl(c.toDataURL('image/jpeg', 0.9));
+                            }
+                          };
+                          img.src = imgSrc;
+                        };
+
                         fetch(src).then(r => r.blob()).then(blob => {
                           if (!active) return;
                           const file = new File([blob], "selfie.jpg", { type: "image/jpeg" });
                           setSelectedFile(file);
                           setPreviewUrl(src);
                           setIsCapturing(false);
+                          cropFace(src);
                         });
                       }
                     }
@@ -277,6 +315,8 @@ export default function RegisterFacePage() {
             }
           } else {
             setFaceQuality(faces.length > 1 ? 'poor' : 'none');
+            setQualityScore(0);
+            lastBboxRef.current = null;
             goodFrameCount = 0;
             if (countdownTimer) {
               clearInterval(countdownTimer);
@@ -299,7 +339,7 @@ export default function RegisterFacePage() {
         }
       }
 
-      if (active) setTimeout(runDetection, 150); // ~7 FPS
+      if (active) setTimeout(runDetection, 100); // ~10 FPS
     };
 
     initDetector().then(() => {
@@ -365,6 +405,7 @@ export default function RegisterFacePage() {
 
   const clearFile = () => {
     setSelectedFile(null);
+    setCroppedFaceUrl(null);
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
@@ -510,35 +551,54 @@ export default function RegisterFacePage() {
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <motion.div
                   key={countdown}
-                  initial={{ scale: 0.5, opacity: 0 }}
+                  initial={{ scale: 2, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", damping: 12, stiffness: 200 }}
                   className="w-20 h-20 rounded-full bg-black/60 flex items-center justify-center"
                 >
                   <span className="text-4xl font-bold text-white">{countdown}</span>
                 </motion.div>
               </div>
             )}
-            {/* Quality status bar */}
-            <div className="absolute bottom-0 inset-x-0 p-3">
-              <div className={`rounded-full px-4 py-2 text-xs font-medium text-center backdrop-blur-sm ${
-                faceQuality === 'good'
-                  ? 'bg-green-500/80 text-white'
-                  : faceQuality === 'poor'
-                    ? 'bg-yellow-500/80 text-white'
-                    : 'bg-black/50 text-white/80'
-              }`}>
+            {/* Quality score + status */}
+            <div className="absolute bottom-0 inset-x-0 p-3 space-y-2">
+              {hasFaceDetector && faceQuality !== 'none' && (
+                <div className="px-3">
+                  <div className="h-1.5 rounded-full bg-white/20 overflow-hidden">
+                    <motion.div
+                      className={`h-full rounded-full ${qualityScore >= 70 ? 'bg-green-400' : qualityScore >= 40 ? 'bg-yellow-400' : 'bg-red-400'}`}
+                      initial={false}
+                      animate={{ width: `${qualityScore}%` }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-white/60 text-center mt-1">
+                    Chất lượng: {qualityScore}%
+                  </p>
+                </div>
+              )}
+              <motion.div
+                layout
+                className={`rounded-full px-4 py-2 text-xs font-medium text-center backdrop-blur-sm ${
+                  faceQuality === 'good'
+                    ? 'bg-green-500/80 text-white'
+                    : faceQuality === 'poor'
+                      ? 'bg-yellow-500/80 text-white'
+                      : 'bg-black/50 text-white/80'
+                }`}
+              >
                 {hasFaceDetector ? (
                   faceQuality === 'good'
                     ? countdown > 0
                       ? `Chụp tự động sau ${countdown}s...`
                       : '✓ Khuôn mặt rõ ràng — giữ yên'
                     : faceQuality === 'poor'
-                      ? 'Khuôn mặt chưa đạt — căn chỉnh lại'
+                      ? 'Căn chỉnh khuôn mặt vào giữa khung hình'
                       : 'Đang tìm khuôn mặt...'
                 ) : (
                   'Hướng mặt vào camera'
                 )}
-              </div>
+              </motion.div>
             </div>
             {/* Camera controls */}
             <div className="absolute top-3 right-3 flex gap-2">
@@ -558,19 +618,27 @@ export default function RegisterFacePage() {
             {/* Face detection indicator */}
             {hasFaceDetector && (
               <div className="absolute top-3 left-3">
-                <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm ${
-                  faceQuality === 'good' ? 'bg-green-500/80 text-white' :
-                  faceQuality === 'poor' ? 'bg-yellow-500/80 text-white' :
-                  'bg-black/50 text-white/70'
-                }`}>
+                <motion.div
+                  layout
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm ${
+                    faceQuality === 'good' ? 'bg-green-500/80 text-white' :
+                    faceQuality === 'poor' ? 'bg-yellow-500/80 text-white' :
+                    'bg-black/50 text-white/70'
+                  }`}
+                >
                   <ScanFace className="h-3.5 w-3.5" />
                   <span>{faceQuality === 'good' ? 'Phát hiện' : faceQuality === 'poor' ? 'Không rõ' : 'Tìm...'}</span>
-                </div>
+                </motion.div>
               </div>
             )}
           </>
         ) : previewUrl ? (
-          <>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+            className="w-full h-full relative"
+          >
             <img
               src={previewUrl}
               alt="Preview"
@@ -582,13 +650,43 @@ export default function RegisterFacePage() {
             >
               <X className="h-5 w-5" />
             </button>
+            {/* Cropped face preview */}
+            {croppedFaceUrl && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.5, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ type: "spring", damping: 15, stiffness: 200, delay: 0.15 }}
+                className="absolute bottom-14 left-1/2 -translate-x-1/2"
+              >
+                <div className="relative">
+                  <img
+                    src={croppedFaceUrl}
+                    alt="Khuôn mặt phát hiện"
+                    className="w-20 h-20 rounded-full object-cover border-3 border-green-400 shadow-lg"
+                  />
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.4, type: "spring" }}
+                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-green-500 flex items-center justify-center"
+                  >
+                    <Check className="h-3.5 w-3.5 text-white" />
+                  </motion.div>
+                </div>
+              </motion.div>
+            )}
             {/* Confirmation message */}
             <div className="absolute bottom-0 inset-x-0 p-3">
-              <div className="rounded-full px-4 py-2 text-xs font-medium text-center bg-green-500/80 text-white backdrop-blur-sm">
-                ✓ Ảnh đã chụp — xác nhận bên dưới hoặc chụp lại
-              </div>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="rounded-full px-4 py-2 text-xs font-medium text-center bg-green-500/80 text-white backdrop-blur-sm"
+              >
+                ✓ Khuôn mặt đã được nhận diện — xác nhận hoặc chụp lại
+              </motion.div>
             </div>
-          </>
+          </motion.div>
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground p-4 bg-muted">
             <Camera className="h-16 w-16 mb-4 opacity-50" />
