@@ -140,12 +140,12 @@ export default function RegisterFacePage() {
     setProcessingStatus("processing");
     setProcessingProgress(20);
 
-    // Animate progress gradually
+    // Animate progress quickly — backend completes fast now
     let progress = 20;
     const progressInterval = setInterval(() => {
-      progress = Math.min(progress + Math.random() * 8, 85);
+      progress = Math.min(progress + 5 + Math.random() * 10, 90);
       setProcessingProgress(progress);
-    }, 2000);
+    }, 800);
 
     const poll = async () => {
       try {
@@ -159,7 +159,7 @@ export default function RegisterFacePage() {
           // Wait a moment to show the success state, then redirect
           setTimeout(() => {
             router.push("/gallery");
-          }, 2000);
+          }, 1500);
           return; // stop polling
         } else if (result.status === "failed") {
           clearInterval(progressInterval);
@@ -174,16 +174,16 @@ export default function RegisterFacePage() {
           return; // stop polling
         }
         
-        // Still pending/processing - continue polling
-        pollingRef.current = setTimeout(poll, 2000);
+        // Still pending/processing - poll fast
+        pollingRef.current = setTimeout(poll, 1500);
       } catch (error) {
         console.error("Polling error:", error);
         // Continue polling on network errors
-        pollingRef.current = setTimeout(poll, 3000);
+        pollingRef.current = setTimeout(poll, 2000);
       }
     };
 
-    pollingRef.current = setTimeout(poll, 2000);
+    pollingRef.current = setTimeout(poll, 1500);
 
     // Cleanup on unmount
     return () => {
@@ -960,10 +960,9 @@ export default function RegisterFacePage() {
               {(processingStatus === "processing" || processingStatus === "uploading") && (
                 <div className="space-y-3 text-left">
                   {[
-                    { label: "Tải ảnh lên server", done: processingProgress > 10 },
-                    { label: "Phát hiện khuôn mặt", done: processingProgress > 35 },
-                    { label: "Tạo vector nhận diện", done: processingProgress > 60 },
-                    { label: "Lưu trữ và đối chiếu", done: processingProgress > 85 },
+                    { label: "Tải ảnh lên server", done: processingProgress > 15 },
+                    { label: "Phát hiện khuôn mặt", done: processingProgress > 45 },
+                    { label: "Lưu khuôn mặt vào hệ thống", done: processingProgress > 75 },
                   ].map((step, i) => (
                     <div key={i} className="flex items-center gap-3 text-sm">
                       {step.done ? (
@@ -974,7 +973,7 @@ export default function RegisterFacePage() {
                         >
                           <Check className="h-3 w-3 text-white" />
                         </motion.div>
-                      ) : processingProgress > (i * 25) ? (
+                      ) : processingProgress > (i * 30) ? (
                         <Loader2 className="h-5 w-5 text-primary animate-spin flex-shrink-0" />
                       ) : (
                         <div className="w-5 h-5 rounded-full border-2 border-muted flex-shrink-0" />
