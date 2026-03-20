@@ -173,6 +173,13 @@ export default function RegisterFacePage() {
     }
   }, [user]);
 
+  // Auto-open camera in update mode
+  useEffect(() => {
+    if (mode === "update" && !isCapturing && !previewUrl && !selectedFile) {
+      startCamera();
+    }
+  }, [mode]);
+
   // Lightweight face detection using browser FaceDetector API (no heavy libs)
   useEffect(() => {
     if (!isCapturing) {
@@ -434,7 +441,7 @@ export default function RegisterFacePage() {
     try {
       const compressed = await compressImage(selectedFile);
       await api.registerFace(compressed);
-      toast.success("Cập nhật khuôn mặt thành công!");
+      toast.success("Đã gửi ảnh khuôn mặt! Hệ thống đang xử lý...");
       router.push("/gallery");
     } catch (error: any) {
       toast.error(error.message || "Có lỗi xảy ra. Vui lòng thử lại.");
@@ -476,8 +483,9 @@ export default function RegisterFacePage() {
     try {
       const compressed = await compressImage(selectedFile);
       await api.registerFace(compressed);
-      toast.success("Cập nhật khuôn mặt thành công!");
+      toast.success("Đã gửi ảnh khuôn mặt! Hệ thống đang xử lý...");
       clearFile();
+      router.push("/gallery");
     } catch (error: any) {
       toast.error(error.message || "Có lỗi xảy ra. Vui lòng thử lại.");
     } finally {

@@ -60,21 +60,24 @@ async def queue_task(
 async def queue_face_registration(
     db: AsyncSession,
     user_id: str,
-    embedding: List[float],
+    image_path: str,
 ) -> str:
     """
     Queue face registration task.
     
     The worker will:
-    1. Store the embedding in Qdrant user_references collection
-    2. Run backfill to match existing faces to this user
+    1. Download user selfie from MinIO
+    2. Run DeepFace to extract embedding
+    3. Store the embedding in Qdrant user_references collection
+    4. Run backfill to match existing faces to this user
+    5. Clean up temp image
     """
     return await queue_task(
         db=db,
         task_type=TaskType.FACE_REGISTRATION,
         payload={
             "user_id": user_id,
-            "embedding": embedding,
+            "image_path": image_path,
         },
         priority="high",
     )

@@ -17,7 +17,6 @@ from typing import Optional
 from app.core.dependencies import CurrentUser
 from app.schemas import UserFaceRegisterResponse
 from app.schemas.user import UserProfileData, UserResponse
-from app.services.face_detection import face_detection_service
 from app.services.vector_store import vector_store_service
 from app.database import get_db
 from app.models.user import User
@@ -121,9 +120,8 @@ async def register_user_face(
     """
     Register user's reference face for auto-matching.
     
-    1. User uploads a clear selfie
-    2. System detects face and generates embedding
-    3. Queues task to store embedding and run backfill
+    Fast path: compress image, store in MinIO, queue background task.
+    The worker handles the slow DeepFace inference + Qdrant storage + backfill.
     """
     # Validate file type
     if not file.content_type or not file.content_type.startswith("image/"):
@@ -135,7 +133,7 @@ async def register_user_face(
     # Read file
     file_bytes = await file.read()
     
-    # Compress for faster processing
+    # Compress for faster upload/storage
     def _compress(data: bytes) -> bytes:
         nparr = np.frombuffer(data, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -150,35 +148,22 @@ async def register_user_face(
     file_bytes = await asyncio.to_thread(_compress, file_bytes)
     
     try:
-        # Detect single face - this is quick, can run in API
-        embedding = face_detection_service.get_single_face_embedding(file_bytes)
+        # Store compressed image in MinIO for worker to process
+        from app.services.storage import storage_service
+        image_path = await storage_service.async_upload_file(
+            file_data=file_bytes,
+            filename="selfie.jpg",
+            content_type="image/jpeg",
+            folder="temp-faces",
+        )
         
-        if embedding is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Không phát hiện khuôn mặt trong ảnh. Vui lòng chụp lại rõ ràng hơn.",
-            )
-    
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e),
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Face detection failed: {str(e)}",
-        )
-    
-    try:
-        # Queue face registration task for worker
-        # Worker will: 1) Store in Qdrant, 2) Run backfill
+        # Queue face registration task — worker does the heavy DeepFace work
         from app.services.background import queue_face_registration
         
         task_id = await queue_face_registration(
             db=db,
             user_id=user.id,
-            embedding=embedding,
+            image_path=image_path,
         )
     
     except Exception as e:
@@ -188,8 +173,8 @@ async def register_user_face(
         )
     
     return UserFaceRegisterResponse(
-        qdrant_id=task_id,  # Return task ID instead of qdrant ID (will be created by worker)
-        message="Face registration queued. Backfill will run automatically.",
+        qdrant_id=task_id,
+        message="Đang xử lý khuôn mặt. Hệ thống sẽ tự động nhận diện bạn trong các ảnh.",
         backfill_triggered=True,
     )
 

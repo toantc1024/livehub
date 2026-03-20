@@ -187,21 +187,50 @@ async def process_face_registration(task, session_maker, qdrant, settings):
     """
     Process face registration task.
     
-    1. Store user's face embedding in Qdrant user_references
-    2. Run backfill to match existing unassigned faces
+    1. Download user selfie from MinIO
+    2. Run DeepFace to extract embedding
+    3. Store user's face embedding in Qdrant user_references
+    4. Run backfill to match existing unassigned faces
+    5. Clean up temp image
     """
     from qdrant_client.models import PointStruct
     from sqlalchemy import update
     from uuid import uuid4
     from app.models.face import Face
     from app.models.task import BackgroundTask, TaskStatus
+    from app.services.face_detection import face_detection_service
+    from app.services.storage import storage_service
     
     user_id = task.payload["user_id"]
-    embedding = task.payload["embedding"]
+    image_path = task.payload.get("image_path")
+    embedding = task.payload.get("embedding")  # Legacy support
     
     logger.info(f"Processing face registration for user {user_id}")
     
     try:
+        # If image_path provided, download and run DeepFace
+        if image_path and not embedding:
+            logger.info(f"  Downloading selfie from {image_path}")
+            storage_service.init()
+            image_bytes = storage_service.download_file(image_path)
+            logger.info(f"  Downloaded {len(image_bytes)} bytes")
+            
+            # Run face detection (the heavy part)
+            embedding = face_detection_service.get_single_face_embedding(image_bytes)
+            
+            if embedding is None:
+                raise ValueError("Không phát hiện khuôn mặt trong ảnh.")
+            
+            # Clean up temp image
+            try:
+                storage_service.delete_file(image_path)
+                logger.info(f"  Cleaned up temp image")
+            except Exception:
+                pass  # Non-critical
+        
+        if not embedding:
+            raise ValueError("No embedding or image_path in task payload")
+        
         # Ensure user_references collection exists
         try:
             await qdrant.get_collection(settings.QDRANT_USER_COLLECTION)

@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut, Shield } from "lucide-react";
+import { LogOut, Shield, ScanFace } from "lucide-react";
 import { AnimatePresence, motion, useAnimation } from "framer-motion";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -163,6 +163,16 @@ export function Navbar() {
                         <DropdownMenuSeparator />
                       </>
                     )}
+
+                    {/* Update face */}
+                    <DropdownMenuItem asChild className="cursor-pointer rounded-xl">
+                      <Link href="/gallery/register-face" className="flex items-center">
+                        <ScanFace className="mr-2 h-4 w-4" />
+                        Cập nhật khuôn mặt
+                      </Link>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator />
                     
                     {/* Logout */}
                     <DropdownMenuItem
