@@ -118,7 +118,6 @@ export default function RegisterFacePage() {
   const webcamRef = useRef<Webcam>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [faceQuality, setFaceQuality] = useState<'none' | 'poor' | 'good'>('none');
-  const [countdown, setCountdown] = useState(0);
   const [hasFaceDetector, setHasFaceDetector] = useState(false);
   const [croppedFaceUrl, setCroppedFaceUrl] = useState<string | null>(null);
   const [qualityScore, setQualityScore] = useState(0); // 0-100
@@ -174,76 +173,26 @@ export default function RegisterFacePage() {
     }
   }, [user]);
 
-  // Real-time face detection using MediaPipe (cross-browser) with browser FaceDetector fallback
+  // Lightweight face detection using browser FaceDetector API (no heavy libs)
   useEffect(() => {
     if (!isCapturing) {
       setFaceQuality('none');
-      setCountdown(0);
       setQualityScore(0);
       return;
     }
 
     let active = true;
-    let mpDetector: any = null;
-    let browserDetector: any = null;
-    let detectorType: 'mediapipe' | 'browser' | null = null;
-    let goodFrameCount = 0;
-    let countdownTimer: ReturnType<typeof setInterval> | null = null;
-    let currentCountdown = 0;
-    let lastTimestamp = -1;
+    let detector: any = null;
 
-    const initDetector = async () => {
-      // Try MediaPipe first (works in all browsers)
+    // Only use browser FaceDetector if available (Chrome/Edge)
+    if (typeof window !== 'undefined' && 'FaceDetector' in window) {
       try {
-        const { FaceDetector, FilesetResolver } = await import('@mediapipe/tasks-vision');
-        const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-        );
-        mpDetector = await FaceDetector.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
-          },
-          runningMode: "VIDEO",
-        });
-        detectorType = 'mediapipe';
+        detector = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 5 });
         setHasFaceDetector(true);
-        return;
-      } catch (e) {
-        console.warn("MediaPipe init failed, trying browser FaceDetector:", e);
+      } catch {
+        setHasFaceDetector(false);
       }
-
-      // Fallback: browser FaceDetector API (Chrome/Edge)
-      if (typeof window !== 'undefined' && 'FaceDetector' in window) {
-        try {
-          browserDetector = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 5 });
-          detectorType = 'browser';
-          setHasFaceDetector(true);
-        } catch {
-          setHasFaceDetector(false);
-        }
-      }
-    };
-
-    const detectFaces = async (video: HTMLVideoElement): Promise<Array<{ x: number; y: number; width: number; height: number }>> => {
-      if (detectorType === 'mediapipe' && mpDetector) {
-        const now = performance.now();
-        if (now === lastTimestamp) return [];
-        lastTimestamp = now;
-        const result = mpDetector.detectForVideo(video, now);
-        return (result.detections || []).map((d: any) => {
-          const bb = d.boundingBox;
-          return { x: bb.originX, y: bb.originY, width: bb.width, height: bb.height };
-        });
-      }
-      if (detectorType === 'browser' && browserDetector) {
-        const faces = await browserDetector.detect(video);
-        return faces.map((f: any) => {
-          const bb = f.boundingBox;
-          return { x: bb.x, y: bb.y, width: bb.width, height: bb.height };
-        });
-      }
-      return [];
-    };
+    }
 
     const runDetection = async () => {
       if (!active) return;
@@ -252,7 +201,7 @@ export default function RegisterFacePage() {
       const canvas = canvasRef.current;
 
       if (!video || !canvas || video.readyState < 2) {
-        if (active) requestAnimationFrame(() => setTimeout(runDetection, 100));
+        if (active) setTimeout(runDetection, 300);
         return;
       }
 
@@ -260,15 +209,19 @@ export default function RegisterFacePage() {
       if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
 
       const ctx = canvas.getContext('2d');
-      if (!ctx) { if (active) setTimeout(runDetection, 100); return; }
+      if (!ctx) { if (active) setTimeout(runDetection, 300); return; }
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (detectorType) {
+      if (detector) {
         try {
-          const faces = await detectFaces(video);
+          const faces = await detector.detect(video);
+          const boxes = faces.map((f: any) => {
+            const bb = f.boundingBox;
+            return { x: bb.x, y: bb.y, width: bb.width, height: bb.height };
+          });
 
-          if (faces.length === 1) {
-            const bb = faces[0];
+          if (boxes.length === 1) {
+            const bb = boxes[0];
             const faceRatio = (bb.width * bb.height) / (canvas.width * canvas.height);
             const cx = bb.x + bb.width / 2;
             const cy = bb.y + bb.height / 2;
@@ -278,7 +231,6 @@ export default function RegisterFacePage() {
             const isGoodSize = faceRatio > 0.03 && faceRatio < 0.8;
             const quality = isCentered && isGoodSize ? 'good' : 'poor';
 
-            // Calculate quality score 0-100
             const centerScore = Math.max(0, 1 - Math.max(
               Math.abs(cx - canvas.width / 2) / (canvas.width * 0.3),
               Math.abs(cy - canvas.height / 2) / (canvas.height * 0.3)
@@ -287,10 +239,9 @@ export default function RegisterFacePage() {
             const score = Math.round((centerScore * 0.5 + sizeScore * 0.5) * 100);
             setQualityScore(score);
 
-            // Save bbox for cropping later
             lastBboxRef.current = { x: bb.x, y: bb.y, w: bb.width, h: bb.height };
 
-            // Draw bounding box with rounded corners
+            // Draw bounding box
             ctx.strokeStyle = quality === 'good' ? '#22c55e' : '#eab308';
             ctx.lineWidth = Math.max(2, canvas.width * 0.005);
             ctx.beginPath();
@@ -298,7 +249,7 @@ export default function RegisterFacePage() {
             ctx.roundRect(bb.x, bb.y, bb.width, bb.height, r);
             ctx.stroke();
 
-            // Draw corner markers for visual feedback
+            // Corner markers
             const cornerLen = Math.min(bb.width, bb.height) * 0.15;
             ctx.lineWidth = Math.max(3, canvas.width * 0.007);
             const drawCorner = (cx: number, cy: number, dx: number, dy: number) => {
@@ -314,80 +265,12 @@ export default function RegisterFacePage() {
             drawCorner(bb.x + bb.width, bb.y + bb.height, -1, -1);
 
             setFaceQuality(quality);
-
-            if (quality === 'good') {
-              goodFrameCount++;
-              if (goodFrameCount >= 5 && !countdownTimer) {
-                currentCountdown = 3;
-                setCountdown(3);
-                countdownTimer = setInterval(() => {
-                  currentCountdown--;
-                  if (currentCountdown > 0) {
-                    setCountdown(currentCountdown);
-                  } else {
-                    setCountdown(0);
-                    if (countdownTimer) clearInterval(countdownTimer);
-                    countdownTimer = null;
-                    // Auto-capture + crop face
-                    if (active && webcamRef.current) {
-                      const src = webcamRef.current.getScreenshot();
-                      if (src) {
-                        const cropFace = (imgSrc: string) => {
-                          const bbox = lastBboxRef.current;
-                          if (!bbox) return;
-                          const img = new Image();
-                          img.onload = () => {
-                            const pad = Math.max(bbox.w, bbox.h) * 0.3;
-                            const sx = Math.max(0, bbox.x - pad);
-                            const sy = Math.max(0, bbox.y - pad);
-                            const sw = Math.min(img.width - sx, bbox.w + pad * 2);
-                            const sh = Math.min(img.height - sy, bbox.h + pad * 2);
-                            const c = document.createElement('canvas');
-                            c.width = sw; c.height = sh;
-                            const cctx = c.getContext('2d');
-                            if (cctx) {
-                              cctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-                              setCroppedFaceUrl(c.toDataURL('image/jpeg', 0.9));
-                            }
-                          };
-                          img.src = imgSrc;
-                        };
-
-                        fetch(src).then(r => r.blob()).then(blob => {
-                          if (!active) return;
-                          const file = new File([blob], "selfie.jpg", { type: "image/jpeg" });
-                          setSelectedFile(file);
-                          setPreviewUrl(src);
-                          setIsCapturing(false);
-                          cropFace(src);
-                        });
-                      }
-                    }
-                  }
-                }, 1000);
-              }
-            } else {
-              goodFrameCount = 0;
-              if (countdownTimer) {
-                clearInterval(countdownTimer);
-                countdownTimer = null;
-                currentCountdown = 0;
-                setCountdown(0);
-              }
-            }
           } else {
-            setFaceQuality(faces.length > 1 ? 'poor' : 'none');
+            setFaceQuality(boxes.length > 1 ? 'poor' : 'none');
             setQualityScore(0);
             lastBboxRef.current = null;
-            goodFrameCount = 0;
-            if (countdownTimer) {
-              clearInterval(countdownTimer);
-              countdownTimer = null;
-              currentCountdown = 0;
-              setCountdown(0);
-            }
-            if (faces.length > 1) {
-              faces.forEach((bb) => {
+            if (boxes.length > 1) {
+              boxes.forEach((bb: any) => {
                 ctx.strokeStyle = '#ef4444';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(bb.x, bb.y, bb.width, bb.height);
@@ -399,18 +282,12 @@ export default function RegisterFacePage() {
         }
       }
 
-      if (active) setTimeout(runDetection, 80); // ~12 FPS
+      if (active) setTimeout(runDetection, 500); // ~2 FPS - lightweight
     };
 
-    initDetector().then(() => {
-      if (active) runDetection();
-    });
+    runDetection();
 
-    return () => {
-      active = false;
-      if (countdownTimer) clearInterval(countdownTimer);
-      if (mpDetector) { try { mpDetector.close(); } catch {} }
-    };
+    return () => { active = false; };
   }, [isCapturing]);
 
   // Compress image to max dimension for faster upload
@@ -643,20 +520,6 @@ export default function RegisterFacePage() {
               className="absolute inset-0 w-full h-full pointer-events-none"
               style={{ transform: isMirrored ? 'scaleX(-1)' : undefined }}
             />
-            {/* Countdown overlay */}
-            {countdown > 0 && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <motion.div
-                  key={countdown}
-                  initial={{ scale: 2, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ type: "spring", damping: 12, stiffness: 200 }}
-                  className="w-20 h-20 rounded-full bg-black/60 flex items-center justify-center"
-                >
-                  <span className="text-4xl font-bold text-white">{countdown}</span>
-                </motion.div>
-              </div>
-            )}
             {/* Quality score + status */}
             <div className="absolute bottom-0 inset-x-0 p-3 space-y-2">
               {hasFaceDetector && faceQuality !== 'none' && (
@@ -686,14 +549,12 @@ export default function RegisterFacePage() {
               >
                 {hasFaceDetector ? (
                   faceQuality === 'good'
-                    ? countdown > 0
-                      ? `Chụp tự động sau ${countdown}s...`
-                      : '✓ Khuôn mặt rõ ràng — giữ yên'
+                    ? '✓ Khuôn mặt rõ ràng — nhấn Chụp ngay'
                     : faceQuality === 'poor'
                       ? 'Căn chỉnh khuôn mặt vào giữa khung hình'
                       : 'Đang tìm khuôn mặt...'
                 ) : (
-                  'Hướng mặt vào camera'
+                  'Hướng mặt vào camera và nhấn Chụp ngay'
                 )}
               </motion.div>
             </div>
@@ -785,12 +646,15 @@ export default function RegisterFacePage() {
             </div>
           </motion.div>
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground p-4 bg-muted">
+          <div
+            className="w-full h-full flex flex-col items-center justify-center text-muted-foreground p-4 bg-muted cursor-pointer hover:bg-muted/80 transition-colors"
+            onClick={() => { clearFile(); startCamera(); }}
+          >
             <Camera className="h-16 w-16 mb-4 opacity-50" />
             {showCurrentFaceMessage ? (
-              <p className="text-sm text-center">Đã đăng ký khuôn mặt. Chụp ảnh mới để cập nhật.</p>
+              <p className="text-sm text-center">Chạm để mở camera và cập nhật khuôn mặt</p>
             ) : (
-              <p className="text-sm">Chụp ảnh hoặc tải lên</p>
+              <p className="text-sm">Chạm để mở camera hoặc tải ảnh lên</p>
             )}
           </div>
         )}
@@ -858,7 +722,7 @@ export default function RegisterFacePage() {
               <li>• Nhìn thẳng vào camera</li>
               <li>• Không đeo kính râm hoặc che mặt</li>
               <li>• Khuôn mặt chiếm phần lớn khung hình</li>
-              {hasFaceDetector && <li>• Hệ thống sẽ <strong>tự động chụp</strong> khi phát hiện khuôn mặt rõ ràng</li>}
+              {hasFaceDetector && <li>• Hệ thống sẽ hiển thị điểm chất lượng, bạn nhấn <strong>Chụp ngay</strong> khi sẵn sàng</li>}
             </ul>
           </div>
         </div>
@@ -902,8 +766,26 @@ export default function RegisterFacePage() {
           >
             <div className="bg-card border rounded-3xl p-8 shadow-lg">
               <div className="text-center mb-6">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <Edit3 className="h-8 w-8 text-primary" />
+                {/* User avatar with edit option */}
+                <div
+                  className="relative w-20 h-20 mx-auto mb-4 cursor-pointer group"
+                  onClick={() => {
+                    const tabTrigger = document.querySelector('[data-state="inactive"][value="face"]') as HTMLElement;
+                    if (tabTrigger) tabTrigger.click();
+                    clearFile();
+                    startCamera();
+                  }}
+                >
+                  {user?.image ? (
+                    <img src={user.image} alt="Avatar" className="w-20 h-20 rounded-full object-cover border-2 border-muted" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+                      <User className="h-10 w-10 text-primary" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <Camera className="h-6 w-6 text-white" />
+                  </div>
                 </div>
                 <h1 className="text-2xl font-bold mb-2">Cập nhật thông tin</h1>
                 <p className="text-muted-foreground">

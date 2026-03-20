@@ -2,9 +2,12 @@
 Users router - Face registration and profile endpoints.
 """
 
+import asyncio
 from datetime import datetime
 from uuid import uuid4
 
+import cv2
+import numpy as np
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -131,6 +134,20 @@ async def register_user_face(
     
     # Read file
     file_bytes = await file.read()
+    
+    # Compress for faster processing
+    def _compress(data: bytes) -> bytes:
+        nparr = np.frombuffer(data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            return data
+        h, w = img.shape[:2]
+        if max(h, w) > 1024:
+            scale = 1024 / max(h, w)
+            img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        _, buf = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        return buf.tobytes()
+    file_bytes = await asyncio.to_thread(_compress, file_bytes)
     
     try:
         # Detect single face - this is quick, can run in API

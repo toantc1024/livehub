@@ -2,9 +2,12 @@
 Images router - Upload (admin-only) and listing endpoints.
 """
 
+import asyncio
 from typing import Optional
 from uuid import uuid4
 
+import cv2
+import numpy as np
 from fastapi import APIRouter, Depends, UploadFile, File, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -20,6 +23,20 @@ from app.database import get_db
 
 
 router = APIRouter(prefix="/images", tags=["Images"])
+
+
+def compress_image_bytes(image_bytes: bytes, max_dim: int = 2048, quality: int = 80) -> bytes:
+    """Compress image to reduce size. Resize if larger than max_dim, re-encode as JPEG."""
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img is None:
+        return image_bytes
+    h, w = img.shape[:2]
+    if max(h, w) > max_dim:
+        scale = max_dim / max(h, w)
+        img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+    _, buf = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    return buf.tobytes()
 
 
 # ==================
@@ -50,6 +67,9 @@ async def upload_image(
     # Read file
     file_bytes = await file.read()
     
+    # Compress image for optimized storage and loading
+    file_bytes = await asyncio.to_thread(compress_image_bytes, file_bytes)
+    
     # Generate image ID
     image_id = str(uuid4())
     
@@ -72,7 +92,6 @@ async def upload_image(
     original_url = storage_service.get_presigned_url(storage_path, expires_hours=24 * 7)
     
     # Generate blur placeholder for lazy loading (runs in background, non-blocking)
-    import asyncio
     blur_placeholder = await asyncio.to_thread(
         storage_service.generate_blur_placeholder, file_bytes
     )
