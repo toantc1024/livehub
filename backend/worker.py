@@ -187,16 +187,17 @@ async def process_face_registration(task, session_maker, qdrant, settings):
     """
     Process face registration task.
     
+    Fast path (what the user waits for):
     1. Download user selfie from MinIO
     2. Run DeepFace to extract embedding
     3. Store user's face embedding in Qdrant user_references
-    4. Run backfill to match existing unassigned faces
-    5. Clean up temp image
+    4. Mark task as COMPLETED
+    
+    Then queue a separate USER_BACKFILL task for the slow matching work.
     """
     from qdrant_client.models import PointStruct
     from sqlalchemy import update
     from uuid import uuid4
-    from app.models.face import Face
     from app.models.task import BackgroundTask, TaskStatus
     from app.services.face_detection import face_detection_service
     from app.services.storage import storage_service
@@ -256,12 +257,8 @@ async def process_face_registration(task, session_maker, qdrant, settings):
         )
         logger.info(f"  Stored user reference: {qdrant_id}")
         
-        # Now run backfill - match all unassigned faces to this user
-        matched_count = await run_backfill_for_user(
-            user_id, embedding, session_maker, qdrant, settings
-        )
-        
-        # Mark task completed
+        # ===== Mark task as COMPLETED immediately =====
+        # The user sees "completed" right away — no waiting for backfill
         async with session_maker() as db:
             await db.execute(
                 update(BackgroundTask)
@@ -273,7 +270,29 @@ async def process_face_registration(task, session_maker, qdrant, settings):
             )
             await db.commit()
         
-        logger.info(f"  ✓ Face registration complete, matched {matched_count} faces")
+        logger.info(f"  ✓ Face registration complete for user {user_id}")
+        
+        # ===== Queue backfill as a separate background task =====
+        # This runs independently — user doesn't wait for it
+        try:
+            from app.services.background import queue_task
+            from app.models.task import TaskType as TT
+            
+            async with session_maker() as db:
+                backfill_task_id = await queue_task(
+                    db=db,
+                    task_type=TT.USER_BACKFILL,
+                    payload={
+                        "user_id": user_id,
+                        "user_qdrant_id": qdrant_id,
+                    },
+                    priority="normal",
+                )
+            logger.info(f"  Queued backfill task {backfill_task_id} for user {user_id}")
+        except Exception as e:
+            # Backfill queue failure is non-critical — face is already registered
+            logger.warning(f"  Failed to queue backfill (non-critical): {e}")
+        
         return True
         
     except Exception as e:
