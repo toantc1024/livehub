@@ -24,6 +24,7 @@ export default function GalleryPage() {
   const [recentImages, setRecentImages] = useState<ImageItem[]>([]);
   const [isLoadingImages, setIsLoadingImages] = useState(true);
   const [totalImages, setTotalImages] = useState(0);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const fetchRecentImages = useCallback(async () => {
     try {
@@ -44,18 +45,32 @@ export default function GalleryPage() {
       return;
     }
     if (!isLoading && isAuthenticated && needsProfileSetup) {
-      router.replace("/gallery/register-face");
+      // Check if face is pending before redirecting
+      (async () => {
+        try {
+          const faceStatus = await api.getFaceStatus();
+          if (faceStatus.isPending || faceStatus.hasRegisteredFace) {
+            // Face is being processed or already registered, don't redirect
+            setIsRedirecting(false);
+            return;
+          }
+        } catch (e) {
+          // On error, fall through to redirect
+        }
+        setIsRedirecting(true);
+        router.replace("/gallery/register-face");
+      })();
     }
   }, [isLoading, isAuthenticated, needsProfileSetup, router]);
 
   useEffect(() => {
-    if (isAuthenticated && !needsProfileSetup) {
+    if (isAuthenticated && !isRedirecting) {
       fetchRecentImages();
     }
-  }, [isAuthenticated, needsProfileSetup, fetchRecentImages]);
+  }, [isAuthenticated, isRedirecting, fetchRecentImages]);
 
   if (isLoading) return <PageLoading text="Đang tải..." />;
-  if (!isAuthenticated || needsProfileSetup) return <PageLoading text="Đang chuyển hướng..." />;
+  if (!isAuthenticated || isRedirecting) return <PageLoading text="Đang chuyển hướng..." />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">

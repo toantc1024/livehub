@@ -182,34 +182,109 @@ async def register_user_face(
 class FaceStatusResponse(BaseModel):
     """Response for face status check."""
     hasRegisteredFace: bool
+    isPending: bool = False
+    taskId: Optional[str] = None
     registeredAt: Optional[datetime] = None
+
+
+class FaceTaskStatusResponse(BaseModel):
+    """Response for face task status polling."""
+    taskId: str
+    status: str  # pending, processing, completed, failed
+    error: Optional[str] = None
+    createdAt: Optional[datetime] = None
+    completedAt: Optional[datetime] = None
 
 
 @router.get("/face-status", response_model=FaceStatusResponse)
 async def get_face_status(
     user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Check if user has registered their face.
     
-    Returns whether user has a reference face stored in Qdrant.
+    Returns whether user has a reference face stored in Qdrant,
+    AND whether there is a pending/processing face registration task.
+    This prevents redirect loops when face is being processed.
     """
+    from app.models.task import BackgroundTask, TaskType, TaskStatus
+    import logging
+    logger = logging.getLogger(__name__)
+
+    has_face = False
+    is_pending = False
+    task_id = None
+    
+    # Check Qdrant for completed reference
     try:
         await vector_store_service.init()
-        
-        # Check if user has a reference in Qdrant
         has_face = await vector_store_service.check_user_has_reference(user.id)
-        
         await vector_store_service.close()
-        
-        return FaceStatusResponse(
-            hasRegisteredFace=has_face,
-            registeredAt=datetime.utcnow() if has_face else None,
+    except Exception as e:
+        logger.warning(f"Failed to check Qdrant for user {user.id}: {e}")
+    
+    # Check background_tasks for pending/processing face registration
+    if not has_face:
+        try:
+            result = await db.execute(
+                select(BackgroundTask)
+                .where(
+                    BackgroundTask.taskType == TaskType.FACE_REGISTRATION,
+                    BackgroundTask.status.in_([TaskStatus.PENDING, TaskStatus.PROCESSING]),
+                    BackgroundTask.payload["user_id"].astext == user.id,
+                )
+                .order_by(BackgroundTask.createdAt.desc())
+                .limit(1)
+            )
+            pending_task = result.scalar_one_or_none()
+            if pending_task:
+                is_pending = True
+                task_id = pending_task.id
+        except Exception as e:
+            logger.warning(f"Failed to check pending tasks for user {user.id}: {e}")
+    
+    return FaceStatusResponse(
+        hasRegisteredFace=has_face,
+        isPending=is_pending,
+        taskId=task_id,
+        registeredAt=datetime.utcnow() if has_face else None,
+    )
+
+
+@router.get("/face-task-status/{task_id}", response_model=FaceTaskStatusResponse)
+async def get_face_task_status(
+    task_id: str,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Poll for face registration task status.
+    
+    Used by frontend to show loading animation while face is being processed.
+    """
+    from app.models.task import BackgroundTask, TaskType
+    
+    result = await db.execute(
+        select(BackgroundTask).where(
+            BackgroundTask.id == task_id,
+            BackgroundTask.taskType == TaskType.FACE_REGISTRATION,
+            BackgroundTask.payload["user_id"].astext == user.id,
+        )
+    )
+    task = result.scalar_one_or_none()
+    
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
         )
     
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to check face status: {str(e)}",
-        )
+    return FaceTaskStatusResponse(
+        taskId=task.id,
+        status=task.status.value,
+        error=task.error,
+        createdAt=task.createdAt,
+        completedAt=task.completedAt,
+    )
 

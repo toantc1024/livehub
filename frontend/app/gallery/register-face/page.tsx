@@ -28,6 +28,9 @@ import {
   SwitchCamera,
   Edit3,
   ScanFace,
+  Loader2,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -102,6 +105,13 @@ export default function RegisterFacePage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Face processing state
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingTaskId, setProcessingTaskId] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<"uploading" | "processing" | "completed" | "failed">("uploading");
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
   // Profile data
   const [profileData, setProfileData] = useState<ProfileData>({
     fullName: "",
@@ -123,6 +133,72 @@ export default function RegisterFacePage() {
   const [qualityScore, setQualityScore] = useState(0); // 0-100
   const lastBboxRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
+  // Poll task status function
+  const startPolling = useCallback((taskId: string) => {
+    setIsProcessing(true);
+    setProcessingTaskId(taskId);
+    setProcessingStatus("processing");
+    setProcessingProgress(20);
+
+    // Animate progress gradually
+    let progress = 20;
+    const progressInterval = setInterval(() => {
+      progress = Math.min(progress + Math.random() * 8, 85);
+      setProcessingProgress(progress);
+    }, 2000);
+
+    const poll = async () => {
+      try {
+        const result = await api.getFaceTaskStatus(taskId);
+        
+        if (result.status === "completed") {
+          clearInterval(progressInterval);
+          setProcessingProgress(100);
+          setProcessingStatus("completed");
+          toast.success("Đăng ký khuôn mặt thành công!");
+          // Wait a moment to show the success state, then redirect
+          setTimeout(() => {
+            router.push("/gallery");
+          }, 2000);
+          return; // stop polling
+        } else if (result.status === "failed") {
+          clearInterval(progressInterval);
+          setProcessingStatus("failed");
+          setProcessingProgress(0);
+          toast.error(result.error || "Đăng ký khuôn mặt thất bại. Vui lòng thử lại.");
+          // Allow user to retry after a moment
+          setTimeout(() => {
+            setIsProcessing(false);
+            setProcessingTaskId(null);
+          }, 3000);
+          return; // stop polling
+        }
+        
+        // Still pending/processing - continue polling
+        pollingRef.current = setTimeout(poll, 2000);
+      } catch (error) {
+        console.error("Polling error:", error);
+        // Continue polling on network errors
+        pollingRef.current = setTimeout(poll, 3000);
+      }
+    };
+
+    pollingRef.current = setTimeout(poll, 2000);
+
+    // Cleanup on unmount
+    return () => {
+      clearInterval(progressInterval);
+      if (pollingRef.current) clearTimeout(pollingRef.current);
+    };
+  }, [router]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearTimeout(pollingRef.current);
+    };
+  }, []);
+
   // Check face status on mount
   useEffect(() => {
     async function checkFaceStatus() {
@@ -137,6 +213,11 @@ export default function RegisterFacePage() {
         } else if (status.hasRegisteredFace) {
           // Existing user with face: show update form
           setMode("update");
+        } else if (status.isPending && status.taskId) {
+          // Face registration is in progress — show processing state
+          setMode("register");
+          setCurrentStep(2);
+          startPolling(status.taskId);
         } else {
           // Existing user without face: show face step only
           setMode("register");
@@ -154,7 +235,7 @@ export default function RegisterFacePage() {
     if (!isLoading && isAuthenticated) {
       checkFaceStatus();
     }
-  }, [isLoading, isAuthenticated, needsProfileSetup]);
+  }, [isLoading, isAuthenticated, needsProfileSetup, startPolling]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -438,12 +519,33 @@ export default function RegisterFacePage() {
     }
 
     setIsSubmitting(true);
+    setProcessingStatus("uploading");
+    setProcessingProgress(0);
+    setIsProcessing(true);
     try {
       const compressed = await compressImage(selectedFile);
-      await api.registerFace(compressed);
-      toast.success("Đã gửi ảnh khuôn mặt! Hệ thống đang xử lý...");
-      router.push("/gallery");
+      setProcessingProgress(10);
+      const result = await api.registerFace(compressed);
+      setProcessingProgress(15);
+      
+      // Start polling for task completion
+      if (result.qdrant_id) {
+        startPolling(result.qdrant_id);
+      } else {
+        // Fallback: check face-status for task id
+        const status = await api.getFaceStatus();
+        if (status.isPending && status.taskId) {
+          startPolling(status.taskId);
+        } else {
+          // No task found, just redirect
+          setProcessingStatus("completed");
+          setProcessingProgress(100);
+          setTimeout(() => router.push("/gallery"), 2000);
+        }
+      }
     } catch (error: any) {
+      setIsProcessing(false);
+      setProcessingProgress(0);
       toast.error(error.message || "Có lỗi xảy ra. Vui lòng thử lại.");
     } finally {
       setIsSubmitting(false);
@@ -480,13 +582,32 @@ export default function RegisterFacePage() {
     }
 
     setIsSubmitting(true);
+    setProcessingStatus("uploading");
+    setProcessingProgress(0);
+    setIsProcessing(true);
     try {
       const compressed = await compressImage(selectedFile);
-      await api.registerFace(compressed);
-      toast.success("Đã gửi ảnh khuôn mặt! Hệ thống đang xử lý...");
+      setProcessingProgress(10);
+      const result = await api.registerFace(compressed);
+      setProcessingProgress(15);
       clearFile();
-      router.push("/gallery");
+      
+      // Start polling for task completion
+      if (result.qdrant_id) {
+        startPolling(result.qdrant_id);
+      } else {
+        const status = await api.getFaceStatus();
+        if (status.isPending && status.taskId) {
+          startPolling(status.taskId);
+        } else {
+          setProcessingStatus("completed");
+          setProcessingProgress(100);
+          setTimeout(() => router.push("/gallery"), 2000);
+        }
+      }
     } catch (error: any) {
+      setIsProcessing(false);
+      setProcessingProgress(0);
       toast.error(error.message || "Có lỗi xảy ra. Vui lòng thử lại.");
     } finally {
       setIsSubmitting(false);
@@ -744,6 +865,147 @@ export default function RegisterFacePage() {
 
   if (!isAuthenticated) {
     return null;
+  }
+
+  // ====== PROCESSING OVERLAY ======
+  if (isProcessing) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+        <Navbar />
+        <main className="container pt-24 pb-12 flex items-center justify-center min-h-[80vh]">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="max-w-md w-full mx-auto text-center"
+          >
+            <div className="bg-card border rounded-3xl p-8 shadow-lg space-y-8">
+              {/* Animated icon */}
+              <div className="relative mx-auto w-28 h-28">
+                {processingStatus === "completed" ? (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", damping: 10, stiffness: 200 }}
+                    className="w-28 h-28 rounded-full bg-green-500/10 flex items-center justify-center"
+                  >
+                    <CheckCircle2 className="h-14 w-14 text-green-500" />
+                  </motion.div>
+                ) : processingStatus === "failed" ? (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", damping: 10, stiffness: 200 }}
+                    className="w-28 h-28 rounded-full bg-red-500/10 flex items-center justify-center"
+                  >
+                    <XCircle className="h-14 w-14 text-red-500" />
+                  </motion.div>
+                ) : (
+                  <>
+                    {/* Spinning ring */}
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
+                      className="absolute inset-0 rounded-full border-4 border-transparent border-t-primary border-r-primary/30"
+                    />
+                    {/* Pulsing inner circle */}
+                    <motion.div
+                      animate={{ scale: [1, 1.1, 1] }}
+                      transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                      className="absolute inset-3 rounded-full bg-primary/10 flex items-center justify-center"
+                    >
+                      <ScanFace className="h-10 w-10 text-primary" />
+                    </motion.div>
+                  </>
+                )}
+              </div>
+
+              {/* Status text */}
+              <div className="space-y-2">
+                <h2 className="text-xl font-bold">
+                  {processingStatus === "uploading" && "Đang tải ảnh lên..."}
+                  {processingStatus === "processing" && "Đang xử lý khuôn mặt..."}
+                  {processingStatus === "completed" && "Hoàn tất!"}
+                  {processingStatus === "failed" && "Xử lý thất bại"}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {processingStatus === "uploading" && "Vui lòng chờ trong giây lát..."}
+                  {processingStatus === "processing" && "Hệ thống đang phân tích và lưu trữ khuôn mặt của bạn. Quá trình này có thể mất vài giây."}
+                  {processingStatus === "completed" && "Khuôn mặt đã được đăng ký thành công! Đang chuyển hướng..."}
+                  {processingStatus === "failed" && "Đã xảy ra lỗi khi xử lý khuôn mặt. Bạn có thể thử lại."}
+                </p>
+              </div>
+
+              {/* Progress bar */}
+              {processingStatus !== "failed" && (
+                <div className="space-y-2">
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <motion.div
+                      className={`h-full rounded-full ${
+                        processingStatus === "completed"
+                          ? "bg-green-500"
+                          : "bg-primary"
+                      }`}
+                      initial={{ width: "0%" }}
+                      animate={{ width: `${processingProgress}%` }}
+                      transition={{ duration: 0.5, ease: "easeOut" }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {Math.round(processingProgress)}%
+                  </p>
+                </div>
+              )}
+
+              {/* Processing steps indicator */}
+              {(processingStatus === "processing" || processingStatus === "uploading") && (
+                <div className="space-y-3 text-left">
+                  {[
+                    { label: "Tải ảnh lên server", done: processingProgress > 10 },
+                    { label: "Phát hiện khuôn mặt", done: processingProgress > 35 },
+                    { label: "Tạo vector nhận diện", done: processingProgress > 60 },
+                    { label: "Lưu trữ và đối chiếu", done: processingProgress > 85 },
+                  ].map((step, i) => (
+                    <div key={i} className="flex items-center gap-3 text-sm">
+                      {step.done ? (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0"
+                        >
+                          <Check className="h-3 w-3 text-white" />
+                        </motion.div>
+                      ) : processingProgress > (i * 25) ? (
+                        <Loader2 className="h-5 w-5 text-primary animate-spin flex-shrink-0" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full border-2 border-muted flex-shrink-0" />
+                      )}
+                      <span className={step.done ? "text-foreground" : "text-muted-foreground"}>
+                        {step.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Action button for failed state */}
+              {processingStatus === "failed" && (
+                <Button
+                  className="w-full rounded-full h-12"
+                  onClick={() => {
+                    setIsProcessing(false);
+                    setProcessingTaskId(null);
+                    setProcessingProgress(0);
+                  }}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Thử lại
+                </Button>
+              )}
+            </div>
+          </motion.div>
+        </main>
+      </div>
+    );
   }
 
   // ====== UPDATE MODE UI with TABS ======

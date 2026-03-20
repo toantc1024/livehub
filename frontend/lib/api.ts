@@ -245,10 +245,27 @@ export const api = {
    */
   async getFaceStatus(): Promise<{
     hasRegisteredFace: boolean;
+    isPending: boolean;
+    taskId?: string;
     registeredAt?: string;
   }> {
     const res = await fetchWithAuth("/users/face-status");
     if (!res.ok) throw new Error("Failed to get face status");
+    return res.json();
+  },
+
+  /**
+   * Poll face registration task status.
+   */
+  async getFaceTaskStatus(taskId: string): Promise<{
+    taskId: string;
+    status: "pending" | "processing" | "completed" | "failed";
+    error?: string;
+    createdAt?: string;
+    completedAt?: string;
+  }> {
+    const res = await fetchWithAuth(`/users/face-task-status/${taskId}`);
+    if (!res.ok) throw new Error("Failed to get task status");
     return res.json();
   },
 

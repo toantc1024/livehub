@@ -62,6 +62,7 @@ export default function MyPhotosPage() {
   const [total, setTotal] = useState(0);
   const [filter, setFilter] = useState<"all" | "my-face">("all");
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -109,15 +110,27 @@ export default function MyPhotosPage() {
 
     // Redirect to profile setup if profile is incomplete
     if (!isLoading && isAuthenticated && needsProfileSetup) {
-      router.replace("/gallery/register-face");
+      (async () => {
+        try {
+          const faceStatus = await api.getFaceStatus();
+          if (faceStatus.isPending || faceStatus.hasRegisteredFace) {
+            setIsRedirecting(false);
+            return;
+          }
+        } catch (e) {
+          // On error, fall through to redirect
+        }
+        setIsRedirecting(true);
+        router.replace("/gallery/register-face");
+      })();
     }
   }, [isLoading, isAuthenticated, needsProfileSetup, router]);
 
   useEffect(() => {
-    if (isAuthenticated && !needsProfileSetup) {
+    if (isAuthenticated && !isRedirecting) {
       fetchImages(1, filter);
     }
-  }, [isAuthenticated, needsProfileSetup, fetchImages, filter]);
+  }, [isAuthenticated, isRedirecting, fetchImages, filter]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -180,7 +193,7 @@ export default function MyPhotosPage() {
     return <PageLoading text="Đang tải..." />;
   }
 
-  if (!isAuthenticated || needsProfileSetup) {
+  if (!isAuthenticated || isRedirecting) {
     return <PageLoading text="Đang chuyển hướng..." />;
   }
 
