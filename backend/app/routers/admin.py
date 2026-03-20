@@ -555,3 +555,52 @@ async def admin_health(admin: AdminUser):
         "checks": checks,
     }
 
+
+@router.post("/reprocess-all")
+async def reprocess_all_images(
+    admin: AdminUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Flush all Qdrant vectors and mark all images for reprocessing.
+
+    Use after model changes (e.g. Facenet512→ArcFace) to regenerate
+    embeddings with the new model. Users will need to re-register faces.
+    """
+    from app.services.vector_store import vector_store_service
+    from sqlalchemy import update as sql_update
+
+    # 1. Flush Qdrant collections
+    await vector_store_service.init()
+    try:
+        await vector_store_service.client.delete_collection(vector_store_service.collection)
+    except Exception:
+        pass
+    try:
+        await vector_store_service.client.delete_collection(vector_store_service.user_collection)
+    except Exception:
+        pass
+    await vector_store_service.close()
+
+    # Re-initialize (recreates empty collections)
+    await vector_store_service.init()
+    await vector_store_service.close()
+
+    # 2. Clear face assignments and qdrant IDs in database
+    await db.execute(sql_update(Face).values(qdrantId=None, userId=None, similarity=None))
+
+    # 3. Mark all READY images as PROCESSING so worker picks them up
+    result = await db.execute(
+        sql_update(Image)
+        .where(Image.status == ImageStatus.READY)
+        .values(status=ImageStatus.PROCESSING)
+    )
+    requeued = result.rowcount
+
+    await db.commit()
+
+    return {
+        "message": f"Flushed Qdrant, requeued {requeued} images for reprocessing with ArcFace model",
+        "requeued_images": requeued,
+        "action_required": "Users must re-register their faces",
+    }

@@ -68,8 +68,8 @@ class Settings(BaseSettings):
     # Face Recognition
     # ===================
     USE_CUDA: bool = False  # Set True on GPU server, False for CPU
-    SIMILARITY_THRESHOLD: float = 0.85
-    FACE_MODEL_NAME: str = "antelopev2"  # ArcFace R100 (512-d embeddings)
+    SIMILARITY_THRESHOLD: float = 0.40  # Calibrated for ArcFace + cosine similarity
+    FACE_MODEL_NAME: str = "ArcFace"  # ArcFace ResNet100 (512-d embeddings)
     
     # ===================
     # CORS

@@ -67,7 +67,7 @@ async def search_faces(
     try:
         await vector_store_service.init()
         
-        threshold = request.threshold if request else 0.85
+        threshold = request.threshold if request else 0.40
         limit = request.limit if request else 10
         
         results = await vector_store_service.search_similar(
