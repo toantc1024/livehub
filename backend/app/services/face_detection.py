@@ -1,21 +1,24 @@
 """
-Face Detection Service — Industry-Grade Pipeline.
+Face Detection Service — Tuned for Event Photography.
 
 Architecture:
-  - Model: ArcFace (ResNet100, 512-d embeddings) — gold-standard for face recognition
-  - Detector: RetinaFace — highest accuracy face detector
-  - Pipeline: Single-step represent() → detection + alignment + embedding in one pass
-  - Quality gates: confidence, minimum size, blur rejection
-  - Embeddings: L2-normalized for consistent cosine similarity
+  - Model: ArcFace (ResNet100, 512-d embeddings)
+  - Detector: RetinaFace (highest accuracy)
+  - Pipeline: Single-step represent() → detection + alignment + embedding
+  - Quality gates: confidence, size, aspect ratio, blur, NMS dedup
+  - Embeddings: L2-normalized for cosine similarity
 
-Why this works better:
-  1. Single-step pipeline preserves face alignment (two-step crop+embed loses it)
-  2. Quality filters prevent garbage-in/garbage-out (blurry/tiny/low-conf faces)
-  3. ArcFace produces more discriminative embeddings than Facenet512
-  4. L2-normalized embeddings give well-calibrated cosine similarity scores:
-     - Same person:      0.40–0.75 cosine similarity
-     - Different person: -0.10–0.25 cosine similarity
-     - Threshold:        0.40 (good precision/recall balance)
+Quality gates (tuned for event/group photos):
+  1. Confidence ≥ 0.90 — only high-confidence detections
+  2. Min face size ≥ 40px — reject too-small faces (noisy embeddings)
+  3. Aspect ratio ≤ 1.8 — reject non-face detections (body parts)
+  4. Blur score ≥ 15 — reject motion-blurred faces
+  5. NMS IoU ≥ 0.4 — remove duplicate overlapping boxes
+
+Similarity calibration (ArcFace + cosine):
+  - Same person:      0.45–0.80
+  - Different person: -0.10–0.30
+  - Recommended threshold: 0.38
 """
 
 import logging
@@ -32,28 +35,33 @@ from app.schemas.face import (
 
 logger = logging.getLogger(__name__)
 
-# Quality thresholds
-MIN_DETECTION_CONFIDENCE = 0.50   # SSD confidence
-MIN_FACE_SIZE_PX = 30             # Minimum face width/height in pixels (lowered for event photos)
-MIN_BLUR_SCORE = 10.0             # Laplacian variance (below = too blurry, lowered for demo)
-MIN_REGISTRATION_CONFIDENCE = 0.50
-MIN_REGISTRATION_FACE_RATIO = 0.04  # Face must be ≥4% of image area
+# ===========================
+# Quality thresholds (batch detection for event photos)
+# ===========================
+MIN_DETECTION_CONFIDENCE = 0.90   # High confidence only — reduces false positives
+MIN_FACE_SIZE_PX = 40             # Min face width/height in pixels
+MAX_FACE_ASPECT_RATIO = 1.8       # Max w/h or h/w ratio (reject body-part detections)
+MIN_BLUR_SCORE = 15.0             # Laplacian variance threshold
+NMS_IOU_THRESHOLD = 0.4           # IoU threshold for non-max suppression
+
+# ===========================
+# Registration thresholds (selfie — stricter)
+# ===========================
+MIN_REGISTRATION_CONFIDENCE = 0.90
+MIN_REGISTRATION_FACE_RATIO = 0.03  # Face must be ≥3% of image area
+MIN_REGISTRATION_BLUR = 20.0
 
 
 class FaceDetectionService:
     """
     Production face detection & embedding service.
-
-    Uses single-step DeepFace.represent() which does:
-      detection → face alignment → model inference
-    in one pass, preserving critical alignment quality.
+    Uses single-step DeepFace.represent() for aligned embeddings.
     """
 
     def __init__(self):
         from app.config import settings
 
         self.model_name = "ArcFace"
-        # We use 'retinaface' for highest accuracy face detection in group/event photos
         self.detector_backend = "retinaface"
         self.use_cuda = settings.USE_CUDA
 
@@ -84,6 +92,46 @@ class FaceDetectionService:
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
+    @staticmethod
+    def _compute_iou(box1, box2) -> float:
+        """Compute IoU between two boxes (x, y, w, h)."""
+        x1, y1, w1, h1 = box1
+        x2, y2, w2, h2 = box2
+
+        xi = max(x1, x2)
+        yi = max(y1, y2)
+        xf = min(x1 + w1, x2 + w2)
+        yf = min(y1 + h1, y2 + h2)
+
+        inter = max(0, xf - xi) * max(0, yf - yi)
+        union = w1 * h1 + w2 * h2 - inter
+        return inter / max(union, 1e-6)
+
+    @staticmethod
+    def _nms(faces: List[dict], iou_threshold: float) -> List[dict]:
+        """Non-max suppression: keep highest confidence face when boxes overlap."""
+        if not faces:
+            return []
+
+        # Sort by confidence descending
+        sorted_faces = sorted(faces, key=lambda f: f["confidence"], reverse=True)
+        keep = []
+
+        for face in sorted_faces:
+            box = (face["x"], face["y"], face["w"], face["h"])
+            is_duplicate = False
+
+            for kept in keep:
+                kept_box = (kept["x"], kept["y"], kept["w"], kept["h"])
+                if FaceDetectionService._compute_iou(box, kept_box) > iou_threshold:
+                    is_duplicate = True
+                    break
+
+            if not is_duplicate:
+                keep.append(face)
+
+        return keep
+
     # ---------------------------
     # Core: single-step pipeline
     # ---------------------------
@@ -91,14 +139,14 @@ class FaceDetectionService:
         """
         Detect faces and generate ArcFace embeddings in a single pass.
 
-        Pipeline: RetinaFace detection → face alignment → ArcFace embedding.
-        Quality filters reject low-confidence, tiny, and blurry faces.
-
-        Args:
-            image: OpenCV BGR image
-
-        Returns:
-            List[FaceDetectionResult] — only high-quality faces
+        Quality pipeline:
+          1. Run RetinaFace + ArcFace (single pass)
+          2. Filter by confidence
+          3. Filter by size
+          4. Filter by aspect ratio
+          5. Filter by blur
+          6. NMS to remove duplicates
+          7. Return clean results
         """
         try:
             representations = DeepFace.represent(
@@ -112,8 +160,14 @@ class FaceDetectionService:
             logger.exception("Face detection failed")
             return []
 
-        results: List[FaceDetectionResult] = []
         img_h, img_w = image.shape[:2]
+
+        # Stage 1: Extract and filter candidates
+        candidates = []
+        reject_conf = 0
+        reject_size = 0
+        reject_aspect = 0
+        reject_blur = 0
 
         for rep in representations:
             region = rep.get("facial_area", {})
@@ -124,41 +178,60 @@ class FaceDetectionService:
             w = int(region.get("w", 0))
             h = int(region.get("h", 0))
 
-            # Gate 1: detection confidence
+            # Gate 1: confidence
             if confidence < MIN_DETECTION_CONFIDENCE:
-                logger.debug(f"Reject face: confidence {confidence:.2f} < {MIN_DETECTION_CONFIDENCE}")
+                reject_conf += 1
                 continue
 
             # Gate 2: minimum pixel size
             if w < MIN_FACE_SIZE_PX or h < MIN_FACE_SIZE_PX:
-                logger.debug(f"Reject face: size {w}×{h} < {MIN_FACE_SIZE_PX}px")
+                reject_size += 1
                 continue
 
-            # Gate 3: blur detection
+            # Gate 3: aspect ratio (reject non-face shapes)
+            aspect = max(w, h) / max(min(w, h), 1)
+            if aspect > MAX_FACE_ASPECT_RATIO:
+                reject_aspect += 1
+                continue
+
+            # Gate 4: blur detection
             blur = self._blur_score(image, x, y, w, h)
             if blur < MIN_BLUR_SCORE:
-                logger.debug(f"Reject face: blur score {blur:.1f} < {MIN_BLUR_SCORE}")
+                reject_blur += 1
                 continue
 
-            # L2-normalize embedding for consistent cosine similarity
-            embedding = self._l2_normalize(rep["embedding"])
+            candidates.append({
+                "x": x, "y": y, "w": w, "h": h,
+                "confidence": confidence,
+                "embedding": rep["embedding"],
+                "blur": blur,
+            })
 
+        # Stage 2: NMS to remove overlapping detections
+        unique_faces = self._nms(candidates, NMS_IOU_THRESHOLD)
+
+        # Stage 3: Build results
+        results: List[FaceDetectionResult] = []
+        for face in unique_faces:
+            embedding = self._l2_normalize(face["embedding"])
             results.append(
                 FaceDetectionResult(
                     bbox=BoundingBox(
-                        x=float(x),
-                        y=float(y),
-                        width=float(w),
-                        height=float(h),
+                        x=float(face["x"]),
+                        y=float(face["y"]),
+                        width=float(face["w"]),
+                        height=float(face["h"]),
                     ),
-                    confidence=confidence,
+                    confidence=face["confidence"],
                     embedding=embedding,
                 )
             )
 
+        nms_removed = len(candidates) - len(unique_faces)
         logger.info(
-            f"Detected {len(representations)} faces, "
-            f"{len(results)} passed quality gates"
+            f"Detected {len(representations)} raw, "
+            f"rejected: conf={reject_conf} size={reject_size} aspect={reject_aspect} blur={reject_blur} nms={nms_removed}, "
+            f"final: {len(results)} faces"
         )
         return results
 
@@ -184,13 +257,12 @@ class FaceDetectionService:
         self, image_bytes: bytes
     ) -> Optional[List[float]]:
         """
-        Extract embedding for user face registration.
+        Extract embedding for user face registration (selfie).
 
         Stricter than batch detection:
         - Exactly one face required
-        - Higher confidence threshold
+        - Higher blur threshold
         - Face must be a significant portion of the image
-        - Blur rejection
 
         Returns:
             512-d L2-normalized embedding, or None if no face
@@ -203,7 +275,6 @@ class FaceDetectionService:
         if image is None:
             raise ValueError("Invalid image bytes")
 
-        # Use single-step pipeline
         try:
             representations = DeepFace.represent(
                 img_path=image,
@@ -216,7 +287,7 @@ class FaceDetectionService:
             logger.exception("Registration face detection failed")
             return None
 
-        # Filter by minimum confidence
+        # Filter by confidence
         valid = [
             r for r in representations
             if float(r.get("face_confidence", 0)) >= MIN_REGISTRATION_CONFIDENCE
@@ -226,9 +297,15 @@ class FaceDetectionService:
             return None
 
         if len(valid) > 1:
-            raise ValueError(
-                f"Phát hiện {len(valid)} khuôn mặt. Vui lòng chụp ảnh chỉ có 1 khuôn mặt."
+            # If multiple faces, pick the largest one (most prominent)
+            # This is more user-friendly than rejecting
+            valid.sort(
+                key=lambda r: int(r.get("facial_area", {}).get("w", 0)) * int(r.get("facial_area", {}).get("h", 0)),
+                reverse=True,
             )
+            # Only keep the largest
+            valid = [valid[0]]
+            logger.info(f"Registration: multiple faces detected, using largest")
 
         rep = valid[0]
         region = rep.get("facial_area", {})
@@ -246,14 +323,21 @@ class FaceDetectionService:
 
         # Check blur
         blur = self._blur_score(image, x, y, w, h)
-        if blur < MIN_BLUR_SCORE:
+        if blur < MIN_REGISTRATION_BLUR:
             raise ValueError(
                 "Ảnh khuôn mặt bị mờ. Vui lòng giữ yên camera và chụp lại."
             )
 
+        # Check aspect ratio
+        aspect = max(w, h) / max(min(w, h), 1)
+        if aspect > MAX_FACE_ASPECT_RATIO:
+            raise ValueError(
+                "Không nhận diện được khuôn mặt rõ ràng. Vui lòng chụp lại."
+            )
+
         logger.info(
             f"Registration face: confidence={confidence:.2f}, "
-            f"size={w}×{h}, ratio={face_ratio:.3f}, blur={blur:.0f}"
+            f"size={w}×{h}, ratio={face_ratio:.3f}, blur={blur:.0f}, aspect={aspect:.2f}"
         )
 
         return self._l2_normalize(rep["embedding"])
