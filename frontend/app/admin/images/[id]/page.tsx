@@ -27,7 +27,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 
@@ -233,11 +232,14 @@ export default function AdminImageDetailPage() {
           className="mb-8"
         >
           <div className="flex items-center gap-4 mb-4">
-            <Link href="/admin/images">
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+              onClick={() => router.back()}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
             <div className="flex-1">
               <h1 className="text-3xl font-bold">Chi tiết ảnh</h1>
               <p className="text-muted-foreground">{image?.filename}</p>

@@ -285,9 +285,10 @@ export const api = {
   /**
    * List all images (admin).
    */
-  async adminGetImages(page = 1, pageSize = 20, status?: string): Promise<any> {
+  async adminGetImages(page = 1, pageSize = 20, status?: string, faceUserId?: string): Promise<any> {
     let url = `/admin/images?page=${page}&page_size=${pageSize}`;
     if (status) url += `&status=${status}`;
+    if (faceUserId) url += `&faceUserId=${encodeURIComponent(faceUserId)}`;
     const res = await fetchWithAuth(url);
     if (!res.ok) throw new Error("Failed to fetch images");
     return res.json();
@@ -306,6 +307,15 @@ export const api = {
     });
 
     if (!res.ok) throw new Error("Upload failed");
+    return res.json();
+  },
+
+  /**
+   * Get users that have face detections (admin, for filter dropdown).
+   */
+  async adminGetFaceUsers(): Promise<Array<{id: string; name?: string; email: string; faceCount: number}>> {
+    const res = await fetchWithAuth("/admin/face-users");
+    if (!res.ok) throw new Error("Failed to fetch face users");
     return res.json();
   },
 

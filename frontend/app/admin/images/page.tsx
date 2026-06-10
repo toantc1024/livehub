@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { Navbar } from "@/components/navbar";
 import { Button } from "@/components/ui/button";
@@ -19,16 +19,17 @@ import {
   Check,
   X,
   FolderOpen,
+  Users,
 } from "lucide-react";
-// import { ImageWithFallback } from "@/components/ui/image-with-fallback"; // Removed as per request
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { useDropzone } from "react-dropzone";
 
-// Blur placeholder - same as gallery
-const BLUR_DATA_URL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAUH/8QAIhAAAQMDBAMAAAAAAAAAAAAAAQIDBAAFEQYSITEHE0H/xAAVAQEBAAAAAAAAAAAAAAAAAAADBf/EABkRAAIDAQAAAAAAAAAAAAAAAAECAAMRIf/aAAwDAQACEQMRAD8AqeM9Y3e43q8RLncJE2LBWGo6HlFQYSpIUck9kk/KKUrDLJkyJUd//9k=";
+// Blur placeholder
+const BLUR_DATA_URL =
+  "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAUH/8QAIhAAAQMDBAMAAAAAAAAAAAAAAQIDBAAFEQYSITEHE0H/xAAVAQEBAAAAAAAAAAAAAAAAAAADBf/EABkRAAIDAQAAAAAAAAAAAAAAAAECAAMRIf/aAAwDAQACEQMRAD8AqeM9Y3e43q8RLncJE2LBWGo6HlFQYSpIUck9kk/KKUrDLJkyJUd//9k=";
 
 interface ImageItem {
   id: string;
@@ -41,6 +42,13 @@ interface ImageItem {
   };
 }
 
+interface FaceUser {
+  id: string;
+  name?: string;
+  email: string;
+  faceCount: number;
+}
+
 interface UploadItem {
   file: File;
   status: "pending" | "uploading" | "success" | "error";
@@ -49,17 +57,43 @@ interface UploadItem {
 }
 
 export default function AdminImagesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
+      }
+    >
+      <AdminImagesContent />
+    </Suspense>
+  );
+}
+
+function AdminImagesContent() {
   const { isLoading, isAuthenticated, isAdmin } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Read initial state from URL params
+  const initialStatus = searchParams.get("status") || "";
+  const initialFaceUser = searchParams.get("faceUserId") || "";
+  const initialPage = parseInt(searchParams.get("page") || "1", 10);
+
   const [activeTab, setActiveTab] = useState("browse");
 
   // Browse state
   const [images, setImages] = useState<ImageItem[]>([]);
   const [isLoadingImages, setIsLoadingImages] = useState(true);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialPage);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatus);
+  const [faceUserFilter, setFaceUserFilter] = useState<string>(initialFaceUser);
+
+  // Face users for filter dropdown
+  const [faceUsers, setFaceUsers] = useState<FaceUser[]>([]);
+  const [isLoadingFaceUsers, setIsLoadingFaceUsers] = useState(false);
 
   // Upload state
   const [uploads, setUploads] = useState<UploadItem[]>([]);
@@ -69,28 +103,64 @@ export default function AdminImagesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const fetchImages = useCallback(async (pageNum: number, status?: string) => {
-    setIsLoadingImages(true);
-    setSelectedIds(new Set()); // Clear selection on page change
+  // Update URL params when filters change
+  const updateUrlParams = useCallback(
+    (newPage: number, newStatus: string, newFaceUser: string) => {
+      const params = new URLSearchParams();
+      if (newStatus) params.set("status", newStatus);
+      if (newFaceUser) params.set("faceUserId", newFaceUser);
+      if (newPage > 1) params.set("page", String(newPage));
+      const queryString = params.toString();
+      router.replace(`/admin/images${queryString ? `?${queryString}` : ""}`, {
+        scroll: false,
+      });
+    },
+    [router]
+  );
+
+  const fetchImages = useCallback(
+    async (pageNum: number, status?: string, faceUserId?: string) => {
+      setIsLoadingImages(true);
+      setSelectedIds(new Set());
+      try {
+        const res = await api.adminGetImages(
+          pageNum,
+          20,
+          status || undefined,
+          faceUserId || undefined
+        );
+        setImages(res.items);
+        setTotalPages(res.pages);
+        setTotal(res.total);
+        setPage(res.page);
+      } catch (error) {
+        console.error("Failed to fetch images:", error);
+        toast.error("Không thể tải danh sách ảnh");
+      } finally {
+        setIsLoadingImages(false);
+      }
+    },
+    []
+  );
+
+  const fetchFaceUsers = useCallback(async () => {
+    setIsLoadingFaceUsers(true);
     try {
-      const res = await api.adminGetImages(pageNum, 20, status || undefined);
-      setImages(res.items);
-      setTotalPages(res.pages);
-      setTotal(res.total);
-      setPage(res.page);
+      const users = await api.adminGetFaceUsers();
+      setFaceUsers(users);
     } catch (error) {
-      console.error("Failed to fetch images:", error);
-      toast.error("Không thể tải danh sách ảnh");
+      console.error("Failed to fetch face users:", error);
     } finally {
-      setIsLoadingImages(false);
+      setIsLoadingFaceUsers(false);
     }
   }, []);
 
   useEffect(() => {
     if (isAuthenticated && isAdmin) {
-      fetchImages(1, statusFilter);
+      fetchImages(initialPage, initialStatus, initialFaceUser);
+      fetchFaceUsers();
     }
-  }, [isAuthenticated, isAdmin, statusFilter, fetchImages]);
+  }, [isAuthenticated, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Selection handlers
   const toggleSelect = (id: string) => {
@@ -113,13 +183,33 @@ export default function AdminImagesPage() {
     }
   };
 
+  const handleStatusChange = (status: string) => {
+    setStatusFilter(status);
+    setPage(1);
+    updateUrlParams(1, status, faceUserFilter);
+    fetchImages(1, status, faceUserFilter);
+  };
+
+  const handleFaceUserChange = (userId: string) => {
+    setFaceUserFilter(userId);
+    setPage(1);
+    updateUrlParams(1, statusFilter, userId);
+    fetchImages(1, statusFilter, userId);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+    updateUrlParams(newPage, statusFilter, faceUserFilter);
+    fetchImages(newPage, statusFilter, faceUserFilter);
+  };
+
   const handleDelete = async (imageId: string) => {
     if (!confirm("Bạn có chắc muốn xóa ảnh này?")) return;
 
     try {
       await api.adminDeleteImage(imageId);
       toast.success("Đã xóa ảnh");
-      fetchImages(page, statusFilter);
+      fetchImages(page, statusFilter, faceUserFilter);
     } catch (error) {
       toast.error("Không thể xóa ảnh");
     }
@@ -157,7 +247,7 @@ export default function AdminImagesPage() {
       toast.error(`Không thể xóa ${errorCount} ảnh`);
     }
 
-    fetchImages(page, statusFilter);
+    fetchImages(page, statusFilter, faceUserFilter);
   };
 
   // Upload handlers
@@ -218,9 +308,7 @@ export default function AdminImagesPage() {
 
     setIsUploading(false);
     toast.success("Upload hoàn tất!");
-
-    // Refresh images list
-    fetchImages(1, statusFilter);
+    fetchImages(1, statusFilter, faceUserFilter);
   };
 
   const clearCompleted = () => {
@@ -287,17 +375,15 @@ export default function AdminImagesPage() {
           <TabsContent value="browse">
             {/* Filters */}
             <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap items-center">
+                {/* Status filter buttons */}
                 {["", "PROCESSING", "READY", "ERROR"].map((status) => (
                   <Button
                     key={status}
                     variant={statusFilter === status ? "default" : "outline"}
                     size="sm"
                     className="rounded-full"
-                    onClick={() => {
-                      setStatusFilter(status);
-                      fetchImages(1, status);
-                    }}
+                    onClick={() => handleStatusChange(status)}
                   >
                     {status === "" && "Tất cả"}
                     {status === "PROCESSING" && "Đang xử lý"}
@@ -305,6 +391,24 @@ export default function AdminImagesPage() {
                     {status === "ERROR" && "Lỗi"}
                   </Button>
                 ))}
+
+                {/* Face user filter dropdown */}
+                <div className="relative ml-2">
+                  <select
+                    value={faceUserFilter}
+                    onChange={(e) => handleFaceUserChange(e.target.value)}
+                    className="h-9 px-3 pr-8 rounded-full border border-input bg-background text-sm appearance-none cursor-pointer hover:bg-accent transition-colors"
+                  >
+                    <option value="">👤 Tất cả khuôn mặt</option>
+                    {faceUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name || user.email.split("@")[0]} (
+                        {user.faceCount})
+                      </option>
+                    ))}
+                  </select>
+                  <Users className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                </div>
               </div>
               <div className="flex gap-2">
                 {images.length > 0 && (
@@ -342,13 +446,34 @@ export default function AdminImagesPage() {
                   variant="outline"
                   size="sm"
                   className="rounded-full"
-                  onClick={() => fetchImages(page, statusFilter)}
+                  onClick={() => fetchImages(page, statusFilter, faceUserFilter)}
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Làm mới
                 </Button>
               </div>
             </div>
+
+            {/* Active filter indicator */}
+            {faceUserFilter && (
+              <div className="mb-4 flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  Lọc theo khuôn mặt:
+                </span>
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
+                  <Users className="h-3.5 w-3.5" />
+                  {faceUsers.find((u) => u.id === faceUserFilter)?.name ||
+                    faceUsers.find((u) => u.id === faceUserFilter)?.email ||
+                    faceUserFilter}
+                  <button
+                    onClick={() => handleFaceUserChange("")}
+                    className="ml-1 hover:bg-primary/20 rounded-full p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              </div>
+            )}
 
             {/* Images grid */}
             {isLoadingImages ? (
@@ -477,7 +602,7 @@ export default function AdminImagesPage() {
                       variant="outline"
                       size="icon"
                       className="rounded-full"
-                      onClick={() => fetchImages(page - 1, statusFilter)}
+                      onClick={() => handlePageChange(page - 1)}
                       disabled={page <= 1}
                     >
                       <ChevronLeft className="h-4 w-4" />
@@ -491,7 +616,7 @@ export default function AdminImagesPage() {
                       variant="outline"
                       size="icon"
                       className="rounded-full"
-                      onClick={() => fetchImages(page + 1, statusFilter)}
+                      onClick={() => handlePageChange(page + 1)}
                       disabled={page >= totalPages}
                     >
                       <ChevronRight className="h-4 w-4" />

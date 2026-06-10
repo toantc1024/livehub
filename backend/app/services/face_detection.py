@@ -34,8 +34,8 @@ logger = logging.getLogger(__name__)
 
 # Quality thresholds
 MIN_DETECTION_CONFIDENCE = 0.50   # SSD confidence
-MIN_FACE_SIZE_PX = 50             # Minimum face width/height in pixels
-MIN_BLUR_SCORE = 30.0             # Laplacian variance (below = too blurry)
+MIN_FACE_SIZE_PX = 30             # Minimum face width/height in pixels (lowered for event photos)
+MIN_BLUR_SCORE = 10.0             # Laplacian variance (below = too blurry, lowered for demo)
 MIN_REGISTRATION_CONFIDENCE = 0.50
 MIN_REGISTRATION_FACE_RATIO = 0.04  # Face must be ≥4% of image area
 
@@ -53,17 +53,17 @@ class FaceDetectionService:
         from app.config import settings
 
         self.model_name = "ArcFace"
-        # We use 'ssd' instead of 'retinaface' to drastically speed up CPU inference
-        self.detector_backend = "ssd"
+        # We use 'retinaface' for highest accuracy face detection in group/event photos
+        self.detector_backend = "retinaface"
         self.use_cuda = settings.USE_CUDA
 
         if not self.use_cuda:
             import os
             os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
             os.environ["ORT_DEVICE"] = "CPU"
-            logger.info("Face detection: ArcFace + SSD (CPU mode)")
+            logger.info("Face detection: ArcFace + RetinaFace (CPU mode)")
         else:
-            logger.info("Face detection: ArcFace + SSD (CUDA mode)")
+            logger.info("Face detection: ArcFace + RetinaFace (CUDA mode)")
 
     @staticmethod
     def _l2_normalize(embedding: List[float]) -> List[float]:

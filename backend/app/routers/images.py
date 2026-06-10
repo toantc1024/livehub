@@ -377,7 +377,7 @@ async def get_image(
     """
     query = (
         select(Image)
-        .options(selectinload(Image.faces))
+        .options(selectinload(Image.faces).selectinload(Face.user))
         .where(Image.id == image_id)
     )
     

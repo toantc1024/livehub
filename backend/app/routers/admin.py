@@ -144,25 +144,55 @@ async def admin_list_images(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     image_status: Optional[ImageStatus] = Query(None, alias="status"),
+    face_user_id: Optional[str] = Query(None, alias="faceUserId"),
 ):
     """
     List all images with pagination (admin only).
+    Supports filtering by status and by face userId.
     """
-    query = select(Image)
-    
-    if image_status:
-        query = query.where(Image.status == image_status)
-    
-    # Count total
-    count_query = select(func.count()).select_from(query.subquery())
-    total = await db.scalar(count_query) or 0
-    
-    # Paginate
-    query = query.offset((page - 1) * page_size).limit(page_size)
-    query = query.order_by(Image.createdAt.desc())
-    
-    result = await db.execute(query)
-    images = result.scalars().all()
+    if face_user_id:
+        # Filter images that contain a face assigned to this user
+        image_ids_query = (
+            select(Image.id)
+            .join(Face, Face.imageId == Image.id)
+            .where(Face.userId == face_user_id)
+            .distinct()
+        )
+        
+        if image_status:
+            image_ids_query = image_ids_query.where(Image.status == image_status)
+        
+        # Count total
+        count_query = select(func.count()).select_from(image_ids_query.subquery())
+        total = await db.scalar(count_query) or 0
+        
+        # Get paginated image IDs
+        image_ids_query = image_ids_query.order_by(Image.id).offset((page - 1) * page_size).limit(page_size)
+        ids_result = await db.execute(image_ids_query)
+        image_ids = [row[0] for row in ids_result.fetchall()]
+        
+        if image_ids:
+            query = select(Image).where(Image.id.in_(image_ids)).order_by(Image.createdAt.desc())
+            result = await db.execute(query)
+            images = result.scalars().all()
+        else:
+            images = []
+    else:
+        query = select(Image)
+        
+        if image_status:
+            query = query.where(Image.status == image_status)
+        
+        # Count total
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await db.scalar(count_query) or 0
+        
+        # Paginate
+        query = query.offset((page - 1) * page_size).limit(page_size)
+        query = query.order_by(Image.createdAt.desc())
+        
+        result = await db.execute(query)
+        images = result.scalars().all()
     
     return ImageListResponse(
         items=[ImageResponse.model_validate(img) for img in images],
@@ -172,7 +202,38 @@ async def admin_list_images(
         pages=(total + page_size - 1) // page_size if total > 0 else 0,
     )
 
-
+@router.get("/face-users")
+async def admin_get_face_users(
+    admin: AdminUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get all users that have faces assigned to them (for filter dropdown).
+    Returns users with face counts.
+    """
+    result = await db.execute(
+        select(
+            User.id,
+            User.name,
+            User.email,
+            func.count(Face.id).label("face_count"),
+        )
+        .join(Face, Face.userId == User.id)
+        .group_by(User.id, User.name, User.email)
+        .order_by(func.count(Face.id).desc())
+    )
+    
+    rows = result.fetchall()
+    
+    return [
+        {
+            "id": row[0],
+            "name": row[1],
+            "email": row[2],
+            "faceCount": row[3],
+        }
+        for row in rows
+    ]
 
 
 @router.get("/images/{image_id}", response_model=ImageWithFaces)

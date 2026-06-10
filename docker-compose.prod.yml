@@ -65,7 +65,7 @@ services:
       - MINIO_BUCKET=livehub
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - SIMILARITY_THRESHOLD=0.40
+      - SIMILARITY_THRESHOLD=0.35
       - CORS_ORIGINS=${CORS_ORIGINS:-["https://livehub.yhcmute.com", "http://localhost:3000"]}
     depends_on:
       livehub-db:
@@ -134,7 +134,7 @@ services:
       - MINIO_BUCKET=livehub
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - SIMILARITY_THRESHOLD=0.40
+      - SIMILARITY_THRESHOLD=0.35
     command: python worker.py
     depends_on:
       livehub-db:
