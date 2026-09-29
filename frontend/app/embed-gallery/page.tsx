@@ -8,6 +8,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { ImageGrid, ImageItem } from "@/components/gallery/image-grid";
+import { FALLBACK_IMAGES } from "@/lib/fallback-images";
 
 interface ImageListResponse {
   items: ImageItem[];
@@ -17,6 +18,8 @@ interface ImageListResponse {
   pages: number;
 }
 
+const PAGE_SIZE = 12;
+
 export default function EmbedGalleryPage() {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [isLoadingImages, setIsLoadingImages] = useState(true);
@@ -24,6 +27,23 @@ export default function EmbedGalleryPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const isFallbackRef = useRef(false);
+
+  const loadFallbackPage = useCallback((pageNum: number, append: boolean) => {
+    const startIndex = (pageNum - 1) * PAGE_SIZE;
+    const endIndex = startIndex + PAGE_SIZE;
+    const pageItems = FALLBACK_IMAGES.slice(startIndex, endIndex);
+
+    if (append && pageNum > 1) {
+      setImages((prev) => [...prev, ...pageItems]);
+    } else {
+      setImages(pageItems);
+    }
+
+    setTotalPages(Math.ceil(FALLBACK_IMAGES.length / PAGE_SIZE));
+    setTotal(FALLBACK_IMAGES.length);
+    setPage(pageNum);
+  }, []);
 
   const fetchImages = useCallback(
     async (pageNum: number, append = false) => {
@@ -32,27 +52,43 @@ export default function EmbedGalleryPage() {
       } else {
         setIsLoadingMore(true);
       }
-      
+
+      // If already using fallback data, paginate directly through fallback images
+      if (isFallbackRef.current) {
+        loadFallbackPage(pageNum, append);
+        setIsLoadingImages(false);
+        setIsLoadingMore(false);
+        return;
+      }
+
       try {
-        const res: ImageListResponse = await api.getPublicRecentImages(pageNum, 12);
-        
-        if (append && pageNum > 1) {
-          setImages(prev => [...prev, ...res.items]);
+        const res: ImageListResponse = await api.getPublicRecentImages(pageNum, PAGE_SIZE);
+
+        if (res && res.items && res.items.length > 0) {
+          if (append && pageNum > 1) {
+            setImages((prev) => [...prev, ...res.items]);
+          } else {
+            setImages(res.items);
+          }
+
+          setTotalPages(res.pages || Math.ceil((res.total || res.items.length) / PAGE_SIZE));
+          setTotal(res.total || res.items.length);
+          setPage(res.page || pageNum);
         } else {
-          setImages(res.items);
+          // No images from API - fall back to local assets
+          isFallbackRef.current = true;
+          loadFallbackPage(pageNum, append);
         }
-        
-        setTotalPages(res.pages);
-        setTotal(res.total);
-        setPage(res.page);
       } catch (error) {
-        console.error("Failed to fetch images:", error);
+        console.warn("Failed to fetch images from API, falling back to /assets folder:", error);
+        isFallbackRef.current = true;
+        loadFallbackPage(pageNum, append);
       } finally {
         setIsLoadingImages(false);
         setIsLoadingMore(false);
       }
     },
-    []
+    [loadFallbackPage]
   );
 
   // Initial load

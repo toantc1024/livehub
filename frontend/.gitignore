@@ -2,8 +2,9 @@
 
 # dependencies
 /node_modules
-/.pnp
+/.pnpm
 .pnp.*
+/.pnpm-store
 .yarn/*
 !.yarn/patches
 !.yarn/plugins

@@ -136,11 +136,18 @@ export const api = {
    * Used for homepage when user is not logged in.
    */
   async getPublicRecentImages(page = 1, pageSize = 20): Promise<any> {
-    const res = await fetch(
-      apiUrl(`/images/public/recent?page=${page}&page_size=${pageSize}`)
-    );
-    if (!res.ok) throw new Error("Failed to fetch public images");
-    return res.json();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch(
+        apiUrl(`/images/public/recent?page=${page}&page_size=${pageSize}`),
+        { signal: controller.signal }
+      );
+      if (!res.ok) throw new Error("Failed to fetch public images");
+      return res.json();
+    } finally {
+      clearTimeout(timeout);
+    }
   },
 
   /**

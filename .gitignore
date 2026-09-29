@@ -3,3 +3,7 @@
 .env.local
 .env.development
 .env.production
+
+# Archives and OS files
+*.zip
+.DS_Store
