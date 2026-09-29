@@ -103,7 +103,7 @@ export default function EmbedGalleryPage() {
   };
 
   const handleOpenMainSite = () => {
-    window.open("https://livehub.yhcmute.com", "_blank");
+    window.open("https://livehub.yhcmute.com/embed-gallery", "_blank");
   };
 
   return (

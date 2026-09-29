@@ -232,7 +232,7 @@ export default function MyPhotosPage() {
 
             {/* Open embed in new tab */}
             <a
-              href="https://livehub.yhcmute.com/gallery/all-photos"
+              href="https://livehub.yhcmute.com/embed-gallery"
               target="_blank"
               rel="noopener noreferrer"
               className="hidden sm:flex items-center gap-2 ml-auto text-sm text-muted-foreground hover:text-foreground transition-colors"
